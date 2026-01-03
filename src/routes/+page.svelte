@@ -188,15 +188,15 @@
 			</div>
 			<button class="button small" onclick={() => deleteEntryInEditor(root)}> ❌ </button>
 		</div>
-		{#each Object.entries(root.folders) as [name, folder]}
+		{#each Object.values(root.folders) as folder}
 			{@render showFolder(folder)}
 		{/each}
-		{#each Object.entries(root.files) as [name, file]}
+		{#each Object.values(root.files) as file}
 			<div class="flex flex-row gap-1">
 				<button
 					class="button file grow"
 					class:selected={file === selected}
-					onclick={() => showFileInTab(file)}>{name}</button
+					onclick={() => showFileInTab(file)}>{file.handle.name}</button
 				>
 				<button class="button small" onclick={() => deleteEntryInEditor(file)}> ❌ </button>
 			</div>
@@ -215,7 +215,7 @@
 					<div class="border-t-2 border-white"></div>
 					{#if folder}
             <div class="flex flex-row gap-2">
-              <button class="button small" onclick={() => reloadFolder()}>↺</button>
+              <button class="button small" onclick={() => reloadFolder(fs)}>↺</button>
 						  <button class="button small" onclick={() => createFileFromTemplate(HTML_TEMPLATE, selected)}>+ html</button>
               <button class="button small" onclick={() => createFileFromTemplate(CSS_TEMPLATE, selected)}>+ css</button>
 						  <button class="button small" onclick={() => createFolder(selected)}>+ Ordner</button>

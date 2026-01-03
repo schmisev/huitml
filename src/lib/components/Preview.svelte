@@ -15,6 +15,9 @@
 
 	let frame: HTMLIFrameElement | null = $state(null);
 	let doc: HTMLDocument | null = $state(null);
+  let title: string = $derived.by(() => {
+    return doc?.head.title || src;
+  });
 
 	onMount(async () => {
 		await navigator.serviceWorker.ready;
@@ -44,12 +47,12 @@
 <div class="w-full h-full flex flex-col gap-2">
 	{#if file.blob.type.startsWith('image')}
     <div class="label">Bild-Vorschau</div>
-		<img class="grow" alt="Bild-Vorschau" {src} />
+		<img alt="Bild-Vorschau" {src} />
 	{:else if file.blob.type.endsWith('css')}
     <div class="label">Style-Vorschau</div>
 		<iframe
 			class="grow"
-      title="Style-preview"
+      title="Style-Vorschau"
 			srcdoc={`
       <style>${file.doc.txt}</style>
       <div>div-Element</div>
@@ -58,7 +61,7 @@
 		>
 		</iframe>
 	{:else}
-    <div class="label">Website-Vorschau</div>
-		<iframe class="grow" title="preview" bind:this={frame}></iframe>
+    <div class="label">{title}</div>
+		<iframe class="grow" title="Vorschau" bind:this={frame}></iframe>
 	{/if}
 </div>
