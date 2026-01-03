@@ -1,0 +1,96 @@
+@import 'tailwindcss';
+
+.button {
+	background: rgba(255, 255, 255, 0.2);
+	border-radius: 0.3rem;
+	box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+	backdrop-filter: blur(5px);
+	-webkit-backdrop-filter: blur(5px);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+
+	width: max-content;
+	padding: 0.2rem 0.4rem;
+
+	transition: all 0.2s;
+
+	&:hover {
+		filter: brightness(105%);
+	}
+
+  &.small {
+    font-size: xx-small;
+  }
+
+	&:active {
+		translate: 0 0.1rem;
+	}
+
+  &.selected {
+    background: rgba(255, 255, 255, 0.6);
+    outline: 2px solid white;
+    outline-offset: -2px;
+  }
+
+	&.file {
+    text-align: left;
+	}
+
+	&.folder {
+    text-align: left;
+	}
+}
+
+.label {
+  background: rgba(255, 255, 255, 0.49);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(12.4px);
+  -webkit-backdrop-filter: blur(12.4px);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+
+  padding: 0.2rem 2rem;
+  text-align: center;
+
+  &.negative {
+    background-color: rgba(255, 200, 200, 0.49);
+  }
+}
+
+.container {
+	background: rgba(255, 255, 255, 0.04);
+	border-radius: 0.5rem;
+	box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+	backdrop-filter: blur(5px);
+	-webkit-backdrop-filter: blur(5px);
+	border: 1px solid rgba(255, 255, 255, 0.13);
+
+	padding: 0.5rem;
+
+  &.selected {
+    outline: 2px solid white;
+    outline-offset: -2px;
+  }
+
+  &.folder {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow: hidden;
+	}
+}
+
+
+/* codemirror */
+.cm-editor {
+  height: 100%;
+  border-radius: 0.5rem;
+  border: 2px solid white;
+  overflow: hidden;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.codemirror-wrapper {
+  border-radius: 0.5rem;
+  height: 100%;
+  flex-grow: 1;
+}
