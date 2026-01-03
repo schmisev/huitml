@@ -188,10 +188,12 @@
 			</div>
 			<button class="button small" onclick={() => deleteEntryInEditor(root)}> ❌ </button>
 		</div>
-		{#each Object.values(root.folders) as folder}
+		{#each Object.keys(root.folders).toSorted() as name}
+      {@const folder = root.folders[name] }
 			{@render showFolder(folder)}
 		{/each}
-		{#each Object.values(root.files) as file}
+		{#each Object.keys(root.files).toSorted() as name}
+      {@const file = root.files[name] }
 			<div class="flex flex-row gap-1">
 				<button
 					class="button file grow"
