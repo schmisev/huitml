@@ -26,11 +26,14 @@ self.addEventListener('fetch', (event) => {
 	const path = url.pathname.replace('/preview', '') || '/index.html';
 
 	if (!files.has(path)) {
+    console.log("Not found", files);
 		event.respondWith(new Response('Not found', { status: 404 }));
 		return;
 	}
 
 	const file = files.get(path);
+
+  console.log("Found file:", file);
 
 	event.respondWith(
 		new Response(file, {

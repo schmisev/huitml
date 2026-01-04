@@ -5,7 +5,6 @@ export interface LocalFile {
     txt: string;
     lastTxt: string;
   }
-	lastSavedDoc: string;
 	blob: Blob;
 	handle: FileSystemFileHandle;
 }
@@ -27,7 +26,6 @@ export async function makeFile(
 		parent,
 		blob: new Blob(),
 		handle,
-		lastSavedDoc: '',
 	};
 
 	const file = await handle.getFile();
@@ -48,12 +46,16 @@ export function isEditable(file: File): boolean {
 
 export async function saveFile(file?: LocalFile) {
 	if (!file) return;
-	if (!file.doc) return;
 	const writable = await file.handle.createWritable();
-	await writable.write(file.doc.txt);
-	await writable.close();
-  file.blob = await file.handle.getFile(); // update blob
-	file.doc.lastTxt = file.doc.txt; // overwrite buffer
+  if (file.doc !== undefined) {
+    await writable.write(file.doc.txt);
+    await writable.close();
+    file.blob = await file.handle.getFile(); // update blob
+    file.doc.lastTxt = file.doc.txt; // overwrite buffer
+  } else {
+    await writable.write(await file.blob.arrayBuffer());
+    await writable.close();
+  }
 }
 
 export async function createNewFile(
@@ -68,21 +70,67 @@ export async function createNewFile(
 	return inFolder.files[fileName];
 }
 
-export async function createNewFolder(inFolder: LocalFolder, folderName: string) {
+export async function createNewFolder(inFolder: LocalFolder, folderName: string): Promise<LocalFolder | undefined> {
 	if (folderName in inFolder.folders) return;
 	const newFolderHandle = await inFolder.handle.getDirectoryHandle(folderName, {
 		create: true
 	});
-	inFolder.folders[newFolderHandle.name] = await recursivelyBuildFS(newFolderHandle, inFolder);
+  const newFolder = await recursivelyBuildFS(newFolderHandle, inFolder);
+  inFolder.folders[newFolderHandle.name] = newFolder;
+  return newFolder;
 }
 
 export async function deleteEntry(entry: LocalFile | LocalFolder, recursive = true) {
 	if (!entry.parent) return;
 	const parent = entry.parent;
 	const name = entry.handle.name;
-	parent.handle.removeEntry(name, { recursive });
+	await parent.handle.removeEntry(name, { recursive });
 	if (name in parent.folders) delete parent.folders[name];
 	if (name in parent.files) delete parent.folders[name];
+}
+
+export async function moveFile(file: LocalFile, target?: LocalFolder, newName?: string): Promise<LocalFile | undefined> {
+  if (!file.parent) return;
+  target = target || file.parent;
+  newName = newName || file.handle.name;
+
+  // create new file
+  const newFile = await createNewFile(target, newName);
+  if (!newFile) return;
+
+  // copy over file contents
+  newFile.blob = file.blob;
+  newFile.doc = file.doc;
+
+  // "save" file contents to disc
+  await saveFile(newFile);
+
+  // delete old file
+  await deleteEntry(file, true);
+
+  return newFile;
+}
+
+// DO NOT USE THIS, THIS IS A WORKAROUND
+export async function moveFolder(folder: LocalFolder, target?: LocalFolder, newName?: string): Promise<LocalFolder | undefined> {
+  if (!folder.parent) return;
+  target = target || folder.parent;
+  newName = newName || folder.handle.name;
+
+  // create new folder
+  const newFolder = await createNewFolder(target, newName);
+  if (!newFolder) return;
+
+  // move files... very expensive
+  for (const fileName in folder.files) {
+    await moveFile(folder.files[fileName], newFolder);
+  }
+  for (const folderName in folder.folders) {
+    await moveFolder(folder.folders[folderName], newFolder);
+  }
+
+  await deleteEntry(folder, true);
+  return newFolder;
 }
 
 export async function recursivelyBuildFS(

@@ -16,11 +16,14 @@
 		toVFS,
 		setVFS,
 		type LocalFile,
-		type LocalFolder
+		type LocalFolder,
+		moveFile,
+		moveFolder
 	} from '$lib/file-system';
 	import Preview from '$lib/components/Preview.svelte';
 	import { onMount } from 'svelte';
 	import codeIcon from '$lib/images/code.svg';
+	import { preventDefault } from 'svelte/legacy';
 
 	// loading
 	async function loadFolder() {
@@ -39,6 +42,7 @@
 			fs = await recursivelyBuildFS(folder.handle, folder.parent);
 			setVFS(fs);
 		} catch (e) {
+      console.error(e);
 			return;
 		}
 	}
@@ -55,7 +59,7 @@
 
 	async function saveTab(tab?: LocalFile) {
 		await saveFile(tab);
-		reloadFolder(fs);
+		await reloadFolder(fs);
 	}
 
 	async function gotoFileInTab(path: string) {
@@ -82,14 +86,13 @@
 		if (tab.blob.type.endsWith('javascript')) return javascript();
 	}
 
-  interface FileTemplate {
-    ext: `.${string}`;
-    doc: string;
-  }
+	interface FileTemplate {
+		ext: `.${string}`;
+		doc: string;
+	}
 
-  const HTML_TEMPLATE: FileTemplate = {
-    doc: 
-`<html>
+	const HTML_TEMPLATE: FileTemplate = {
+		doc: `<html>
   <head>
     <title>Noch kein Titel</title>
   </head>
@@ -97,52 +100,101 @@
     Hier könnte der Website-Inhalt stehen.
   </body>
 </html>`,
-    ext: ".html",
-  }
+		ext: '.html'
+	};
 
-  const CSS_TEMPLATE: FileTemplate = {
-    doc: 
-`div {
+	const CSS_TEMPLATE: FileTemplate = {
+		doc: `div {
   background-color: lightblue;
   border: 2px solid red;
   padding: 0.5rem;
 }
 `,
-    ext: ".css",
-  }
+		ext: '.css'
+	};
 
-  async function createFileFromTemplate(template: FileTemplate, entry?: LocalFolder | LocalFile) {
-    if (!entry) return;
+	async function createFileFromTemplate(template: FileTemplate, entry?: LocalFolder | LocalFile) {
+		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
-    const pathToFolder = getPathToFile(entry, false, false);
-
-		let fileName = prompt(`Es wird eine neue Datei im Ordner ${pathToFolder} erzeugt.\nGib den Dateinamen an: _________${template.ext}`);
-    if (!fileName) return;
-    if (!fileName.endsWith(template.ext)) fileName += template.ext;
+		const pathToFolder = getPathToFile(entry, false, false);
+		let fileName = prompt(
+			`Es wird eine neue Datei im Ordner ${pathToFolder} erzeugt.\nGib den Dateinamen an: _________${template.ext}`
+		);
+		if (!fileName) return;
+		if (!fileName.endsWith(template.ext)) fileName += template.ext;
 		if (!isValidFilename(fileName)) return;
 		const file = await createNewFile(entry, fileName);
 		if (!file) return;
 
-    file.doc = {
-      txt: template.doc,
-      lastTxt: template.doc
-    }
+		file.doc = {
+			txt: template.doc,
+			lastTxt: template.doc
+		};
 
-    await saveFile(file);
+		await saveFile(file);
+		await reloadFolder(fs);
 		showFileInTab(file);
-		reloadFolder(fs);
+	}
+
+	async function renameFile(file?: LocalFile) {
+		if (!file) return;
+
+		const pathToFile = getPathToFile(file, false, false);
+		let fileName = prompt(
+			`Die Datei ${pathToFile} wird umbenannt.\nGib einen neuen Dateinamen an:`,
+      file.handle.name
+		);
+		if (!fileName || !isValidFilename(fileName)) return;
+		const movedFile = await moveFile(file, undefined, fileName);
+		if (!movedFile) return;
+		await reloadFolder(fs);
+		showFileInTab(movedFile);
+	}
+
+  async function dropDraggedEntry(target: LocalFolder) {
+    if (!dragged) return;
+      
+    switch (dragged.kind) {
+      case 'file':
+        const newFile = await moveFile(dragged, target);
+        if (!newFile) return;
+        await reloadFolder(fs);
+        showFileInTab(newFile);
+        dragged = undefined;
+        break;
+      case 'dir':
+        break;
+    }
   }
+
+	async function renameFolder(folder?: LocalFolder) {
+		if (!folder) return;
+    if (!confirm("Bist du dir sicher, dass du den Ordner umbenennen willst? Es kann sehr lange dauern!")) return;
+
+		const pathToFile = getPathToFile(folder, false, false);
+		let fileName = prompt(
+			`Der Ordner ${pathToFile} wird umbenannt.\nGib einen neuen Ordnernamen an:`,
+      folder.handle.name
+		);
+		if (!fileName || !isValidFilename(fileName)) return;
+		const movedFolder = await moveFolder(folder, undefined, fileName);
+		if (!movedFolder) return;
+		await reloadFolder(fs);
+	}
 
 	async function createFile(entry?: LocalFolder | LocalFile) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 
-		const fileName = prompt('Gib den Dateinamen an!');
+		const pathToFolder = getPathToFile(entry, false, false);
+		let fileName = prompt(
+			`Es wird ein neuer Ordner ${pathToFolder} erzeugt.\nGib den Ordnernamen an:`
+		);
 		if (!fileName || !isValidFilename(fileName)) return;
 		const file = await createNewFile(entry, fileName);
 		if (!file) return;
+		await reloadFolder(fs);
 		showFileInTab(file);
-		reloadFolder(fs);
 	}
 
 	async function createFolder(entry?: LocalFolder | LocalFile) {
@@ -152,14 +204,14 @@
 		const fileName = prompt('Gib den Ordnernamen an!');
 		if (!fileName || !isValidFilename(fileName)) return;
 		await createNewFolder(entry, fileName);
-		reloadFolder(fs);
+		await reloadFolder(fs);
 	}
 
 	async function deleteEntryInEditor(entry: LocalFolder | LocalFile) {
 		const ret = confirm(`Willst du die Datei "${entry.handle.name}" wirklich löschen?`);
 		if (ret) {
-			deleteEntry(entry);
-			reloadFolder(fs);
+			await deleteEntry(entry);
+			await reloadFolder(fs);
 		}
 	}
 
@@ -168,6 +220,7 @@
 	let fs: LocalFolder | undefined = $state();
 	let tab: LocalFile | undefined = $state();
 	let selected: LocalFile | LocalFolder | undefined = $state();
+  let dragged: LocalFile | LocalFolder | undefined = $state();
 	let preview: Preview | undefined = $state();
 
 	onMount(() => {
@@ -181,30 +234,85 @@
 </script>
 
 {#snippet showFolder(root: LocalFolder)}
-	<div role="button" tabindex="-1" class="container folder" class:selected={root === selected}>
+	<div
+		role="button"
+		tabindex="-1"
+		class="container folder"
+		class:selected={root === selected}
+		ondragover={(ev) => {
+			ev.stopPropagation();
+			ev.preventDefault();
+			ev.currentTarget.classList.add('selected');
+		}}
+		ondragleave={(ev) => {
+			ev.stopPropagation();
+      ev.preventDefault();
+			ev.currentTarget.classList.remove('selected');
+		}}
+		ondragend={(ev) => {
+      ev.stopPropagation();
+			ev.preventDefault();
+			ev.currentTarget.classList.remove('selected');
+		}}
+		ondrop={async (ev) => {
+      ev.stopPropagation();
+			ev.preventDefault();
+			ev.currentTarget.classList.remove('selected');
+      await dropDraggedEntry(root);
+		}}
+	>
 		<div class="flex flex-row items-center gap-1">
 			<div class="grow hover:cursor-pointer" onclick={() => selectFolder(root)}>
 				📂 {root.handle.name}
 			</div>
-			<button class="button small" onclick={() => deleteEntryInEditor(root)}> ❌ </button>
+			{#if selected === root}
+				<button class="button small" title="Datei umbenennen" onclick={() => renameFolder(root)}>
+					✏️
+				</button>
+				<button
+					class="button small"
+					title="Lösche Ordner"
+					onclick={() => deleteEntryInEditor(root)}
+				>
+					❌
+				</button>
+			{/if}
 		</div>
 		{#each Object.keys(root.folders).toSorted() as name}
-      {@const folder = root.folders[name] }
+			{@const folder = root.folders[name]}
 			{@render showFolder(folder)}
 		{/each}
 		{#each Object.keys(root.files).toSorted() as name}
-      {@const file = root.files[name] }
+			{@const file = root.files[name]}
 			<div class="flex flex-row gap-1">
 				<button
+					draggable="true"
 					class="button file grow"
 					class:selected={file === selected}
-					onclick={() => showFileInTab(file)}>{file.handle.name}</button
+					onclick={() => showFileInTab(file)}
+          ondragstart={(ev) => { dragged = file; }}>{file.handle.name}
+           </button
 				>
-				<button class="button small" onclick={() => deleteEntryInEditor(file)}> ❌ </button>
+				{#if file === selected}
+					<button class="button small" title="Datei umbenennen" onclick={() => renameFile(file)}>
+						✏️
+					</button>
+					<button
+						class="button small"
+						title="Lösche Datei"
+						onclick={() => deleteEntryInEditor(file)}
+					>
+						❌
+					</button>
+				{/if}
 			</div>
 		{/each}
 	</div>
 {/snippet}
+
+<svelte:head>
+	<title>HuiTML Editor</title>
+</svelte:head>
 
 <div class="hui">
 	<Splitpanes style="height: 100dvh;">
@@ -216,12 +324,19 @@
 					</div>
 					<div class="border-t-2 border-white"></div>
 					{#if folder}
-            <div class="flex flex-row gap-2">
-              <button class="button small" onclick={() => reloadFolder(fs)}>↺</button>
-						  <button class="button small" onclick={() => createFileFromTemplate(HTML_TEMPLATE, selected)}>+ html</button>
-              <button class="button small" onclick={() => createFileFromTemplate(CSS_TEMPLATE, selected)}>+ css</button>
-						  <button class="button small" onclick={() => createFolder(selected)}>+ Ordner</button>
-					  </div>
+						<div class="flex flex-row gap-2">
+							<button class="button small" onclick={() => reloadFolder(fs)}>↺</button>
+							<button
+								class="button small"
+								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selected)}>+📄 html</button
+							>
+							<button
+								class="button small"
+								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selected)}>+🖌️ css</button
+							>
+							<button class="button small" onclick={() => createFolder(selected)}>+📂 Ordner</button
+							>
+						</div>
 						{#if fs}
 							{@render showFolder(fs)}
 						{/if}
@@ -237,7 +352,7 @@
 				<div class="flex flex-col gap-2 h-full">
 					{#if tab}
 						<div class="flex flex-row items-center gap-2">
-							<div class="grow">{tab.handle.name}</div>
+							<div class="grow">{getPathToFile(tab, false, false)}</div>
 							{#if tab.doc}
 								<button class="button" onclick={() => saveTab(tab)}>speichern</button>
 							{/if}
