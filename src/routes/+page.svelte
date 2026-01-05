@@ -23,7 +23,11 @@
 	import Preview from '$lib/components/Preview.svelte';
 	import { onMount } from 'svelte';
 	import codeIcon from '$lib/images/code.svg';
-	import { preventDefault } from 'svelte/legacy';
+	import { inTag, inTagRaw } from '$lib/utils';
+	import type { EditorView } from 'codemirror';
+	import * as prettier from 'prettier/standalone';
+	import * as parserHTML from 'prettier/parser-html';
+	import * as parserCSS from 'prettier/parser-postcss';
 
 	// loading
 	async function loadFolder() {
@@ -42,7 +46,7 @@
 			fs = await recursivelyBuildFS(folder.handle, folder.parent);
 			setVFS(fs);
 		} catch (e) {
-      console.error(e);
+			console.error(e);
 			return;
 		}
 	}
@@ -142,7 +146,7 @@
 		const pathToFile = getPathToFile(file, false, false);
 		let fileName = prompt(
 			`Die Datei ${pathToFile} wird umbenannt.\nGib einen neuen Dateinamen an:`,
-      file.handle.name
+			file.handle.name
 		);
 		if (!fileName || !isValidFilename(fileName)) return;
 		const movedFile = await moveFile(file, undefined, fileName);
@@ -151,30 +155,35 @@
 		showFileInTab(movedFile);
 	}
 
-  async function dropDraggedEntry(target: LocalFolder) {
-    if (!dragged) return;
-      
-    switch (dragged.kind) {
-      case 'file':
-        const newFile = await moveFile(dragged, target);
-        if (!newFile) return;
-        await reloadFolder(fs);
-        showFileInTab(newFile);
-        dragged = undefined;
-        break;
-      case 'dir':
-        break;
-    }
-  }
+	async function dropDraggedEntry(target: LocalFolder) {
+		if (!dragged) return;
+
+		switch (dragged.kind) {
+			case 'file':
+				const newFile = await moveFile(dragged, target);
+				if (!newFile) return;
+				await reloadFolder(fs);
+				showFileInTab(newFile);
+				dragged = undefined;
+				break;
+			case 'dir':
+				break;
+		}
+	}
 
 	async function renameFolder(folder?: LocalFolder) {
 		if (!folder) return;
-    if (!confirm("Bist du dir sicher, dass du den Ordner umbenennen willst? Es kann sehr lange dauern!")) return;
+		if (
+			!confirm(
+				'Bist du dir sicher, dass du den Ordner umbenennen willst? Es kann sehr lange dauern!'
+			)
+		)
+			return;
 
 		const pathToFile = getPathToFile(folder, false, false);
 		let fileName = prompt(
 			`Der Ordner ${pathToFile} wird umbenannt.\nGib einen neuen Ordnernamen an:`,
-      folder.handle.name
+			folder.handle.name
 		);
 		if (!fileName || !isValidFilename(fileName)) return;
 		const movedFolder = await moveFolder(folder, undefined, fileName);
@@ -215,15 +224,61 @@
 		}
 	}
 
+	async function insertText(template: (content: string) => string, defaultContent: string) {
+		if (!view) return;
+		const range = view.state.selection.ranges[0];
+		const insertText = range.empty
+			? template(defaultContent)
+			: template(view.state.doc.sliceString(range.from, range.to));
+		view.dispatch({
+			changes: {
+				from: range.from,
+				to: range.to,
+				insert: insertText
+			},
+			selection: { anchor: range.to + 1 }
+		});
+	}
+
+	async function autoformat() {
+		if (!tab?.doc) return;
+		if (!view) return;
+
+		if (tab.blob.type.endsWith('html')) {
+			const newDoc = await prettier.format(tab.doc.txt, { parser: 'html', plugins: [parserHTML] });
+			view.dispatch({
+				changes: {
+					from: 0,
+					to: view.state.doc.length,
+					insert: newDoc
+				}
+			});
+		} else if (tab.blob.type.endsWith('css')) {
+			const newDoc = await prettier.format(tab.doc.txt, { parser: 'css', plugins: [parserCSS] });
+			view.dispatch({
+				changes: {
+					from: 0,
+					to: view.state.doc.length,
+					insert: newDoc
+				}
+			});
+		}
+	}
+
 	// setup
+	let view: EditorView | undefined = $state();
 	let folder: FileSystemDirectoryHandle | undefined = $state();
 	let fs: LocalFolder | undefined = $state();
 	let tab: LocalFile | undefined = $state();
 	let selected: LocalFile | LocalFolder | undefined = $state();
-  let dragged: LocalFile | LocalFolder | undefined = $state();
+	let dragged: LocalFile | LocalFolder | undefined = $state();
 	let preview: Preview | undefined = $state();
 
 	onMount(() => {
+		window.onfocus = async (e) => {
+			await reloadFolder(fs);
+		};
+
 		document.onkeydown = (e) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
 				e.preventDefault();
@@ -232,6 +287,127 @@
 		};
 	});
 </script>
+
+{#snippet showTools(tab: LocalFile)}
+	{#if tab.blob.type.endsWith('html')}
+		<div class="flex flex-row flex-wrap gap-1">
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText((content) => `<a href="">${content}</a>`, 'Link');
+				}}
+				title="Link"
+			>
+				<u class="text-blue-700">{'<a>'}</u>
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText((content) => `<b>${content}</b>`, 'fett');
+				}}
+				title="fett"
+			>
+				<b>{'<b>'}</b>
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText((content) => `<i>${content}</i>`, 'kursiv');
+				}}
+				title="kursiv"
+			>
+				<i>{'<i>'}</i>
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText((content) => `<u>${content}</u>`, 'unterstrichen');
+				}}
+				title="unterstrichen"
+			>
+				<u>{'<u>'}</u>
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText((content) => `<button>${content}</button>`, 'Button');
+				}}
+				title="Button"
+			>
+				<span class="border rounded-md">{'<button>'}</span>
+			</button>
+		</div>
+		<div class="flex flex-row flex-wrap gap-1">
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText((content) => `\n<div>\n${content}\n</div>\n`, 'Neue Einteilung');
+				}}
+				title="Einteilung"
+			>
+				{'<div>'}
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText((content) => `\n<p>\n${content}\n</p>\n`, 'Neuer Paragraph');
+				}}
+				title="Paragraph"
+			>
+				{'<p>'}
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText(
+						(content) => `\n<ul>\n<li>${content}</li>\n<li>...</li>\n</ul>\n`,
+						'Erstes Listenelement'
+					);
+				}}
+				title="Ungeordnete Liste"
+			>
+				{'● <ul>'}
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText(
+						(content) => `\n<ol>\n<li>${content}</li>\n<li>...</li>\n</ol>\n`,
+						'Erstes Listenelement'
+					);
+				}}
+				title="Geordnete Liste"
+			>
+				{'1. <ol>'}
+			</button>
+			<button
+				class="button medium"
+				onclick={() => {
+					insertText(
+						(content) =>
+							`\n<table border="1" width="100%">\n<tr>\n<th>${content}</th>\n</tr>\n<tr>\n<td>${content}</td>\n</tr>\n</table>\n`,
+						'Inhalt'
+					);
+				}}
+				title="Tabelle"
+			>
+				<table>
+          <thead></thead>
+          <tbody>
+            <tr>
+              <td class="border border-black">{'<table>'}</td>
+              <td class="border border-black w-1"></td>
+            </tr>
+            <tr>
+              <td class="border border-black h-1"></td>
+              <td class="border border-black h-1"></td>
+            </tr>
+          </tbody>
+        </table>
+			</button>
+		</div>
+	{/if}
+{/snippet}
 
 {#snippet showFolder(root: LocalFolder)}
 	<div
@@ -246,19 +422,19 @@
 		}}
 		ondragleave={(ev) => {
 			ev.stopPropagation();
-      ev.preventDefault();
+			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
 		}}
 		ondragend={(ev) => {
-      ev.stopPropagation();
+			ev.stopPropagation();
 			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
 		}}
 		ondrop={async (ev) => {
-      ev.stopPropagation();
+			ev.stopPropagation();
 			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
-      await dropDraggedEntry(root);
+			await dropDraggedEntry(root);
 		}}
 	>
 		<div class="flex flex-row items-center gap-1">
@@ -287,12 +463,16 @@
 			<div class="flex flex-row gap-1">
 				<button
 					draggable="true"
-					class="button file grow"
+					class="button file grow flex flex-row"
 					class:selected={file === selected}
 					onclick={() => showFileInTab(file)}
-          ondragstart={(ev) => { dragged = file; }}>{file.handle.name}
-           </button
+					ondragstart={(ev) => {
+						dragged = file;
+					}}
 				>
+					<span class="grow">{file.handle.name}</span>
+					<span class="text-white">{file.doc?.txt === file.doc?.lastTxt ? '' : '●'}</span>
+				</button>
 				{#if file === selected}
 					<button class="button small" title="Datei umbenennen" onclick={() => renameFile(file)}>
 						✏️
@@ -348,13 +528,13 @@
 			</div>
 		</Pane>
 		<Pane>
-			<div class="h-full p-2">
-				<div class="flex flex-col gap-2 h-full">
+				<div class="flex flex-col gap-2 p-2 h-full min-h-0 max-h-full">
 					{#if tab}
 						<div class="flex flex-row items-center gap-2">
 							<div class="grow">{getPathToFile(tab, false, false)}</div>
 							{#if tab.doc}
-								<button class="button" onclick={() => saveTab(tab)}>speichern</button>
+								<button title="Speichern!" class="button" onclick={() => saveTab(tab)}>💾</button>
+                <button title="Formatieren!" class="button" onclick={async () => await autoformat()}>✒️</button>
 							{/if}
 							{#if tab.doc?.txt !== tab.doc?.lastTxt}
 								<span>nicht gespeichert</span>
@@ -362,7 +542,12 @@
 						</div>
 						<div class="flex flex-col flex-wrap"></div>
 						{#if tab.doc}
-							<CodeMirror bind:value={tab.doc.txt} lang={pickLanguage(tab)}></CodeMirror>
+							{@render showTools(tab)}
+							<CodeMirror
+								onready={(e) => (view = e)}
+								bind:value={tab.doc.txt}
+								lang={pickLanguage(tab)}
+							></CodeMirror>
 						{:else}
 							<div class="label negative">Datei kann nicht editiert werden.</div>
 						{/if}
@@ -370,7 +555,6 @@
 						<div class="label negative">Keine Datei geöffnet</div>
 					{/if}
 				</div>
-			</div>
 		</Pane>
 		<Pane>
 			<div class="bg-white h-full p-2">

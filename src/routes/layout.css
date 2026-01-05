@@ -17,6 +17,10 @@
 		filter: brightness(105%);
 	}
 
+  &.medium {
+    font-size: small;
+  }
+
   &.small {
     font-size: xx-small;
   }
@@ -79,7 +83,6 @@
 	}
 }
 
-
 /* codemirror */
 .cm-editor {
   height: 100%;
@@ -92,5 +95,6 @@
 .codemirror-wrapper {
   border-radius: 0.5rem;
   height: 100%;
+  min-height: 0;
   flex-grow: 1;
 }

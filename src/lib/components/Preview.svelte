@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getPathToFile, openPath, type LocalFile, type LocalFolder } from '$lib/file-system';
+	import { inTag } from '$lib/utils';
 	import { onMount } from 'svelte';
 
 	let {
@@ -42,10 +43,6 @@
 			}
 		};
 	});
-
-  function inTag(tag: string, content: string) {
-    return `&lt;${tag}&gt;<${tag}>${content}</${tag}>&lt;/${tag}&gt;`
-  }
 </script>
 
 <div class="w-full h-full flex flex-col gap-2">
