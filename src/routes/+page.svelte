@@ -389,13 +389,11 @@
 		ondragleave={(ev) => {
 			ev.stopPropagation();
 			ev.preventDefault();
-			dragged = undefined;
 			ev.currentTarget.classList.remove('selected');
 		}}
 		ondragend={(ev) => {
 			ev.stopPropagation();
 			ev.preventDefault();
-			dragged = undefined;
 			ev.currentTarget.classList.remove('selected');
 		}}
 		ondrop={async (ev) => {
