@@ -18,12 +18,13 @@ self.addEventListener('fetch', (event) => {
 
 	console.log('Trying to handle:', url.pathname);
 
-	if (!url.pathname.startsWith('/preview/')) {
+	if (!url.pathname.startsWith('/preview/') && !url.pathname.startsWith('/huitml/preview/')) {
 		console.log('Could not handle:', url.pathname);
 		return;
 	}
 
-	const path = url.pathname.replace('/preview', '') || '/index.html';
+	const path = url.pathname.replace("/huitml", '').replace('/preview', '') || '/index.html';
+  console.log(path);
 
 	if (!files.has(path)) {
     console.log("Not found", files);

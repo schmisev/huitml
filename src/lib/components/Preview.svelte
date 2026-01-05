@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { getPathToFile, openPath, type LocalFile, type LocalFolder } from '$lib/file-system';
 	import { inTag } from '$lib/utils';
 	import { onMount } from 'svelte';
@@ -28,8 +29,8 @@
 
 	$effect(() => {
 		if (!frame) return;
-		frame.src = src;
-		if (file.doc) frame.srcdoc = `<base href="${base}">${file.doc.txt}`;
+		frame.src = resolve(src as "/");
+		if (file.doc) frame.srcdoc = `<base href="${resolve(base as "/")}">${file.doc.txt}`;
 
 		frame.onload = (ev) => {
 			if (!frame) return;
