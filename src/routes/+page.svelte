@@ -6,21 +6,6 @@
 	import { Pane, Splitpanes } from 'svelte-splitpanes';
 	import CodeMirror from 'svelte-codemirror-editor';
 	import isValidFilename from 'valid-filename';
-	import {
-		deleteEntry,
-		getPathToFile,
-		createNewFile,
-		createNewFolder,
-		openPath,
-		recursivelyBuildFS,
-		saveFile,
-		toVFS,
-		setVFS,
-		type LocalFile,
-		type LocalFolder,
-		moveFile,
-		moveFolder
-	} from '$lib/file-system';
 	import Preview from '$lib/components/Preview.svelte';
 	import { onMount } from 'svelte';
 	import codeIcon from '$lib/images/code.svg';
@@ -28,23 +13,33 @@
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
+	import { FS, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs';
+
+  // setup
+	let view: EditorView | undefined = $state();
+	let folder: FileSystemDirectoryHandle | undefined = $state();
+	let fs: FS = new FS();
+	let tab: FS_File | undefined = $state();
+	let selected: FS_Entry | undefined = $state();
+	let dragged: FS_Entry | undefined = $state();
+	let preview: Preview | undefined = $state();
 
 	// loading
 	async function loadFolder() {
 		try {
 			folder = await window.showDirectoryPicker();
-			fs = await recursivelyBuildFS(folder, undefined);
-			setVFS(fs);
+			fs.open(folder);
+      fs.setVFS();
 		} catch (e) {
 			return;
 		}
 	}
 
-	async function reloadFolder(folder?: LocalFolder) {
+	async function reloadFolder(folder?: FS_Dir) {
 		if (!folder) return;
 		try {
-			fs = await recursivelyBuildFS(folder.handle, folder.parent);
-			setVFS(fs);
+			fs.openDir(folder.handle, folder.parent);
+			fs.setVFS();
 		} catch (e) {
 			console.error(e);
 			return;
@@ -52,21 +47,21 @@
 	}
 
 	// tab manipulation
-	function showFileInTab(file: LocalFile) {
+	function showFileInTab(file: FS_File) {
 		tab = file;
 		selected = file;
 	}
 
-	function selectFolder(folder: LocalFolder) {
+	function selectFolder(folder: FS_Dir) {
 		selected = folder;
 	}
 
-	async function saveTab(tab?: LocalFile) {
-		await saveFile(tab);
-		await reloadFolder(fs);
+	async function saveTab() {
+    if (!tab) return;
+		fs.saveFile(tab);
 	}
 
-	function revertTab(tab?: LocalFile) {
+	function revertTab(tab?: FS_File) {
 		if (!tab?.doc) return;
 		tab.doc.txt = tab.doc?.lastTxt;
 	}
@@ -89,7 +84,7 @@
 	}
 
 	// codemirror
-	function pickLanguage(tab: LocalFile) {
+	function pickLanguage(tab: FS_File) {
 		if (tab.blob.type.endsWith('css')) return css();
 		if (tab.blob.type.endsWith('html')) return html();
 		if (tab.blob.type.endsWith('javascript')) return javascript();
@@ -168,7 +163,7 @@
 		ext: '.css'
 	};
 
-	async function createFileFromTemplate(template: FileTemplate, entry?: LocalFolder | LocalFile) {
+	async function createFileFromTemplate(template: FileTemplate, entry?: FS_Dir | FS_File) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 		const pathToFolder = getPathToFile(entry, false, false);
@@ -189,7 +184,7 @@
 		showFileInTab(file);
 	}
 
-	async function renameFile(file?: LocalFile) {
+	async function renameFile(file?: FS_File) {
 		if (!file) return;
 
 		const pathToFile = getPathToFile(file, false, false);
@@ -201,7 +196,7 @@
 		showFileInTab(movedFile);
 	}
 
-	async function dropDraggedEntry(target: LocalFolder) {
+	async function dropDraggedEntry(target: FS_Dir) {
 		if (!dragged) return;
 
 		switch (dragged.kind) {
@@ -217,7 +212,7 @@
 		}
 	}
 
-	async function renameFolder(folder?: LocalFolder) {
+	async function renameFolder(folder?: FS_Dir) {
 		if (!folder) return;
 		if (!confirm('Bist du dir sicher, dass du den Ordner umbenennen willst? Es kann sehr lange dauern!')) return;
 
@@ -229,7 +224,7 @@
 		await reloadFolder(fs);
 	}
 
-	async function createFile(entry?: LocalFolder | LocalFile) {
+	async function createFile(entry?: FS_Dir | FS_File) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 
@@ -242,7 +237,7 @@
 		showFileInTab(file);
 	}
 
-	async function createFolder(entry?: LocalFolder | LocalFile) {
+	async function createFolder(entry?: FS_Dir | FS_File) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 
@@ -252,22 +247,13 @@
 		await reloadFolder(fs);
 	}
 
-	async function deleteEntryInEditor(entry: LocalFolder | LocalFile) {
+	async function deleteEntryInEditor(entry: FS_Dir | FS_File) {
 		const ret = confirm(`Willst du die Datei "${entry.handle.name}" wirklich löschen?`);
 		if (ret) {
 			await deleteEntry(entry);
 			await reloadFolder(fs);
 		}
 	}
-
-	// setup
-	let view: EditorView | undefined = $state();
-	let folder: FileSystemDirectoryHandle | undefined = $state();
-	let fs: LocalFolder | undefined = $state();
-	let tab: LocalFile | undefined = $state();
-	let selected: LocalFile | LocalFolder | undefined = $state();
-	let dragged: LocalFile | LocalFolder | undefined = $state();
-	let preview: Preview | undefined = $state();
 
 	onMount(() => {
 		window.onfocus = async (e) => {
@@ -283,7 +269,7 @@
 	});
 </script>
 
-{#snippet showTools(tab: LocalFile)}
+{#snippet showTools(tab: FS_File)}
 	{#if tab.blob.type.endsWith('html')}
 		<div class="flex flex-row flex-wrap gap-1">
 			<button
@@ -375,7 +361,7 @@
 	{/if}
 {/snippet}
 
-{#snippet showFolder(root: LocalFolder)}
+{#snippet showFolder(root: FS_Dir)}
 	<div
 		role="button"
 		tabindex="-1"
