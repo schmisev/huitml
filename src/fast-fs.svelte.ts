@@ -139,8 +139,8 @@ export class FS {
     if (!newDir) return null;
     for (const [name, entry] of dir.map.entries()) {
       switch (entry.kind) {
-        case 'file': this.moveFile(entry, newDir); break;
-        case 'dir': this.moveFolder(entry, newDir); break;
+        case 'file': await this.moveFile(entry, newDir); break;
+        case 'dir': await this.moveFolder(entry, newDir); break;
       }
     }
     await this.removeEntry(dir);

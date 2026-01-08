@@ -1,4 +1,13 @@
 <script lang="ts">
+	import globeIcon from '$lib/components/ui-icons/globe-1-svgrepo-com.svg';
+	import renameIcon from '$lib/components/ui-icons/edit-2-svgrepo-com.svg';
+	import saveIcon from '$lib/components/ui-icons/save-svgrepo-com.svg';
+	import undoIcon from '$lib/components/ui-icons/undo-svgrepo-com.svg';
+	import wandIcon from '$lib/components/ui-icons/wand-svgrepo-com.svg';
+	import trashIcon from '$lib/components/ui-icons/trash-2-svgrepo-com.svg';
+	import laptopIcon from '$lib/components/ui-icons/laptop-svgrepo-com.svg';
+	import refreshIcon from '$lib/components/ui-icons/refresh-svgrepo-com.svg';
+
 	import { html } from '@codemirror/lang-html';
 	import { css } from '@codemirror/lang-css';
 	import { javascript } from '@codemirror/lang-javascript';
@@ -14,10 +23,11 @@
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
 	import { FS, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs.svelte';
+	import FileIcon from '$lib/components/FileIcon.svelte';
 
 	// setup
 	let view: EditorView | undefined = $state();
-	let folder: FileSystemDirectoryHandle | undefined = $state();
+	let root: FileSystemDirectoryHandle | undefined = $state();
 	let fs: FS = new FS();
 	let tab: FS_File | undefined = $state();
 	let selected: FS_Entry | undefined = $state();
@@ -25,19 +35,32 @@
 	let preview: Preview | undefined = $state();
 
 	// loading
+	async function loadOPFS() {
+		try {
+			root = await navigator.storage.getDirectory();
+			await fs.open(root);
+      noTab();
+		} catch (e) {
+			console.error(e);
+			return;
+		}
+	}
+
 	async function loadFolder() {
 		try {
-			folder = await window.showDirectoryPicker();
-			await fs.open(folder);
+			root = await window.showDirectoryPicker();
+			await fs.open(root);
+      noTab();
 		} catch (e) {
 			return;
 		}
 	}
 
 	async function reloadFolder() {
-		if (!folder) return;
+		if (!root) return;
 		try {
-			await fs.open(folder);
+			await fs.open(root);
+      noTab();
 		} catch (e) {
 			console.error(e);
 			return;
@@ -45,6 +68,11 @@
 	}
 
 	// tab manipulation
+  function noTab() {
+    selected = undefined;
+    tab = undefined;
+  }
+
 	function showFileInTab(file: FS_File) {
 		tab = file;
 		selected = file;
@@ -92,9 +120,12 @@
 		if (!view) return;
 		const range = view.state.selection.ranges[0];
 		const insertText = range.empty ? template(defaultContent) : template(view.state.doc.sliceString(range.from, range.to));
-		const indent = view.state.doc.lineAt(range.from).text.match(/^\s*/)?.[0] || "";
-    const indentedText = insertText.split("\n").map((l, i) => i ? indent + l : l).join("\n");
-    view.dispatch({
+		const indent = view.state.doc.lineAt(range.from).text.match(/^\s*/)?.[0] || '';
+		const indentedText = insertText
+			.split('\n')
+			.map((l, i) => (i ? indent + l : l))
+			.join('\n');
+		view.dispatch({
 			changes: {
 				from: range.from,
 				to: range.to,
@@ -176,10 +207,10 @@
 
 		file.state = {
 			doc: template.doc,
-			cachedDoc: "",
+			cachedDoc: ''
 		};
 
-    await fs.saveFile(file);
+		await fs.saveFile(file);
 		showFileInTab(file);
 	}
 
@@ -245,29 +276,32 @@
 		const ret = confirm(`Willst du die Datei "${entry.handle.name}" wirklich löschen?`);
 		if (ret) {
 			await fs.removeEntry(entry);
+      noTab();
 		}
 	}
 
-	onMount(() => {
-		/*
-    window.onfocus = async (e) => {
-			await reloadFolder(fs);
-		};
-    */
-
+	onMount(async () => {
 		document.onkeydown = (e) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
 				e.preventDefault();
 				saveTab();
 			}
 		};
+
+		/*
+    window.onfocus = async (e) => {
+			await reloadFolder(fs);
+		};
+    */
+
+		await loadOPFS();
 	});
 </script>
 
 {#snippet showTools(tab: FS_File)}
 	{#if tab.blob.type.endsWith('html')}
 		<div class="flex flex-row flex-wrap gap-1">
-      <!-- INLINE -->
+			<!-- INLINE -->
 			<button
 				class="button medium"
 				onclick={() => {
@@ -308,27 +342,27 @@
 				title="Button">
 				<span class="border rounded-md pl-2 pr-2">{'<button>'}</span>
 			</button>
-      <button
+			<button
 				class="button medium"
 				onclick={() => {
-					insertText(
-						(content) => `<link href="${content}" rel="stylesheet">`,
-						'style.css'
-					);
+					insertText((content) => `<link href="${content}" rel="stylesheet">`, 'style.css');
 				}}
 				title="Style-Link">
 				{'<link "stylesheet">'}
 			</button>
 		</div>
-    <!-- BLOCKS -->
+		<!-- BLOCKS -->
 		<div class="flex flex-row flex-wrap gap-1">
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `
+					insertText(
+						(content) => `
 <div>
 ${content}
-</div>`, 'Neue Einteilung');
+</div>`,
+						'Neue Einteilung'
+					);
 				}}
 				title="Einteilung">
 				{'<div>'}
@@ -336,10 +370,13 @@ ${content}
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `
+					insertText(
+						(content) => `
 <p>
 ${content}
-</p>`, 'Neuer Paragraph');
+</p>`,
+						'Neuer Paragraph'
+					);
 				}}
 				title="Paragraph">
 				{'<p>'}
@@ -347,11 +384,14 @@ ${content}
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `
+					insertText(
+						(content) => `
 <ul>
   <li>${content}</li>
   <li>...</li>
-</ul>`, 'Erstes Listenelement');
+</ul>`,
+						'Erstes Listenelement'
+					);
 				}}
 				title="Ungeordnete Liste">
 				{'● <ul>'}
@@ -359,11 +399,14 @@ ${content}
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `
+					insertText(
+						(content) => `
 <ol>
   <li>${content}</li>
   <li>...</li>
-</ol>`, 'Erstes Listenelement');
+</ol>`,
+						'Erstes Listenelement'
+					);
 				}}
 				title="Geordnete Liste">
 				{'1. <ol>'}
@@ -380,7 +423,9 @@ ${content}
   <tr>
     <td>${content}</td>
   </tr>
-</table>`, 'Inhalt');
+</table>`,
+						'Inhalt'
+					);
 				}}
 				title="Tabelle">
 				{'<table>'}
@@ -424,35 +469,39 @@ ${content}
 			await dropDraggedEntry(root);
 		}}>
 		<div class="flex flex-row items-center gap-1">
-			<button class="text-left grow hover:cursor-pointer" onclick={() => selectFolder(root)}>
-				📂 {root.handle.name}
+			<button
+				class="text-left grow hover:cursor-pointer flex flex-row flex-nowrap overflow-hidden items-center gap-2"
+				onclick={() => selectFolder(root)}>
+				<FileIcon file={root}></FileIcon>
+				{root.handle.name || 'Online-Ordner'}
 			</button>
 			{#if selected === root && root.parent}
-				<button class="button small" title="Datei umbenennen" onclick={() => renameFolder(root)}> ✏️ </button>
-				<button class="button small" title="Lösche Ordner" onclick={() => deleteEntryInEditor(root)}> ❌ </button>
+				<button class="button" title="Datei umbenennen" onclick={() => renameFolder(root)}><img class="h-4" src={renameIcon} /></button>
+				<button class="button" title="Lösche Ordner" onclick={() => deleteEntryInEditor(root)}><img class="h-4" src={trashIcon} /></button>
 			{/if}
 		</div>
 
-		{#each dirs as dir}
-			{@render showFolder(dir)}
-		{/each}
 		{#each files as file}
 			<div class="flex flex-row gap-1">
 				<button
 					draggable="true"
-					class="button file grow flex flex-row cursor-grab"
+					class="button file grow flex flex-row items-center cursor-grab gap-2 min-w-0 overflow-hidden"
 					class:selected={selected === file}
 					onclick={() => showFileInTab(file)}
 					ondragstart={(ev) => {
 						dragged = file;
 					}}>
-					<span class="grow">{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>
+					<FileIcon {file}></FileIcon><span class="grow">{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>
 				</button>
 				{#if selected && fs.equalEntry(selected, file)}
-					<button class="button small" title="Datei umbenennen" onclick={() => renameFile(file)}> ✏️ </button>
-					<button class="button small" title="Lösche Datei" onclick={() => deleteEntryInEditor(file)}> ❌ </button>
+					<button class="button" title="Datei umbenennen" onclick={() => renameFile(file)}><img class="h-4" src={renameIcon} /></button>
+					<button class="button" title="Lösche Datei" onclick={() => deleteEntryInEditor(file)}><img class="h-4" src={trashIcon} /></button>
 				{/if}
 			</div>
+		{/each}
+
+		{#each dirs as dir}
+			{@render showFolder(dir)}
 		{/each}
 	</div>
 {/snippet}
@@ -465,21 +514,30 @@ ${content}
 	<Splitpanes style="height: 100dvh;">
 		<Pane size={20}>
 			<div class="h-full bg-linear-to-b from-blue-300 to-blue-200 flex flex-col gap-2 p-2">
-				<div class="flex flex-col gap-2 p-2 min-h-max h-min">
-					<div class="font-bold text-center text-white flex flex-row gap-2 p-2 items-center">
-						<img class="w-8 rotate-8" alt="logo" src={codeIcon} /><span>HuiTML</span>
-					</div>
+				<div class="flex flex-col gap-2 p-2 min-h-0 h-min w-full">
+					{#if fs.root && fs.root.handle.name === ''}
+						<button class="button w-full items-center flex flex-row gap-2 flex-nowrap overflow-hidden min-w-0" onclick={loadFolder}
+							><img class="h-5" src={laptopIcon} /> Lade Ordner von PC</button>
+					{:else}
+						<button class="button w-full items-center flex flex-row gap-2 flex-nowrap overflow-hidden min-w-0" onclick={loadOPFS}
+							><img class="h-5" src={globeIcon} /> Lade Online-Ordner</button>
+					{/if}
 					<div class="border-t-2 border-white"></div>
-					{#if folder}
+					{#if fs.root}
 						<div class="flex flex-row gap-2">
-							<button class="button small" onclick={() => reloadFolder()}>↺</button>
-							<button class="button small" onclick={() => createFileFromTemplate(HTML_TEMPLATE, selected)}>+📄 html</button>
-							<button class="button small" onclick={() => createFileFromTemplate(CSS_TEMPLATE, selected)}>+🖌️ css</button>
-							<button class="button small" onclick={() => createFolder(selected)}>+📂 Ordner</button>
+							<button title="Ordner neu laden" class="button" onclick={() => reloadFolder()}><img class="h-3" src={refreshIcon} /></button>
+							<button
+								title="Neues HTML-File erstellen"
+								class="button inline-flex items-center"
+								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selected)}><FileIcon ext="html"></FileIcon></button>
+							<button
+								title="Neues CSS-File erstellen"
+								class="button inline-flex items-center"
+								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selected)}><FileIcon ext="css"></FileIcon></button>
+							<button title="Neuen Ordner erstellen" class="button inline-flex items-center" onclick={() => createFolder(selected)}
+								><FileIcon ext="dir"></FileIcon></button>
 						</div>
-						{#if fs.root}
-							{@render showFolder(fs.root)}
-						{/if}
+						{@render showFolder(fs.root)}
 					{:else}
 						<div>Kein Ordner geöffnet</div>
 						<button class="button" onclick={loadFolder}>Öffne Ordner</button>
@@ -501,9 +559,10 @@ ${content}
 							{/if}
 						</div>
 						{#if tab.state}
-							<button title="Rückgängig!" class="button" onclick={undoEdit}>⏪</button>
-							<button title="Speichern!" class="button" onclick={() => saveTab()}>💾</button>
-							<button title="Formatieren!" class="button whitespace-nowrap" onclick={async () => await autoformat()}>💫</button>
+							<button title="Rückgängig!" class="button" onclick={undoEdit}><img class="h-6" src={undoIcon} /></button>
+							<button title="Speichern!" class="button" onclick={() => saveTab()}><img class="h-6" src={saveIcon} /></button>
+							<button title="Formatieren!" class="button whitespace-nowrap" onclick={async () => await autoformat()}
+								><img class="h-6" src={wandIcon} /></button>
 						{/if}
 					</div>
 					<div class="flex flex-col flex-wrap"></div>
