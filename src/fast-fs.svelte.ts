@@ -7,6 +7,10 @@ export interface FS_File {
 	handle: FileSystemFileHandle;
   parent: FS_Dir;
   blob: File;
+  state?: {
+    doc: string;
+    cachedDoc: string;
+  };
 }
 
 export interface FS_Dir {
@@ -17,8 +21,9 @@ export interface FS_Dir {
 }
 
 export class FS {
+  live: boolean = $state(false);
 	vfs: SvelteMap<string, File>;
-	root: FS_Dir | undefined;
+	root: FS_Dir | undefined = $state();
 
 	constructor() {
 		this.vfs = new SvelteMap();
@@ -28,28 +33,40 @@ export class FS {
 	clear() {
 		this.vfs = new SvelteMap();
 		this.root = undefined;
+    this.stop();
 	}
+
+  start() {
+    this.live = true;
+  }
+
+  stop() {
+    this.live = false;
+  }
 
   // open file system
 	async open(root: FileSystemDirectoryHandle) {
+    this.stop();
 		this.clear();
     this.root = await this.openDir(root);
+    this.setVFS();
+    this.start();
 	}
 
   // constructing new files and directories
 	async openDir(handle: FileSystemDirectoryHandle, parent?: FS_Dir): Promise<FS_Dir> {
-		const newDir: FS_Dir = {
+		const newDir: FS_Dir = $state({
 			handle,
 			kind: 'dir',
 			map: new SvelteMap(),
       parent
-		};
+		});
     if (parent) parent.map.set(handle.name, newDir);
 
 		for await (const [name, entry] of handle.entries()) {
       switch (entry.kind) {
         case 'directory':
-          await this.openDir(entry);
+          await this.openDir(entry, newDir);
           break;
         case 'file':
           await this.openFile(entry, newDir);
@@ -60,13 +77,18 @@ export class FS {
 	}
 
   async openFile(handle: FileSystemFileHandle, parent: FS_Dir): Promise<FS_File> {
-    const newFile: FS_File = {
+    const newFile: FS_File = $state({
       handle,
       kind: 'file',
       blob: await handle.getFile(),
       parent
-    }
+    });
     parent.map.set(handle.name, newFile);
+    if (newFile.blob.type.startsWith("text")) {
+      const txt = await newFile.blob.text();
+      newFile.state = { doc: txt, cachedDoc: txt };
+    }
+
     this.registerFile(newFile);
     return newFile;
   }
@@ -126,9 +148,16 @@ export class FS {
   }
 
   async saveFile(file: FS_File): Promise<void> {
-    const writable = await file.handle.createWritable({ keepExistingData: false });
-    await writable.write(await file.blob.arrayBuffer());
-    await writable.close();
+    if (file.state) {
+      const writable = await file.handle.createWritable({ keepExistingData: false });
+      await writable.write(file.state.doc);
+      await writable.close();
+      file.state.cachedDoc = file.state.doc;
+    } else {
+      const writable = await file.handle.createWritable({ keepExistingData: false });
+      await writable.write(await file.blob.arrayBuffer());
+      await writable.close();
+    }
     // recover saved blob
     file.blob = await file.handle.getFile();
     this.registerFile(file);
@@ -138,14 +167,14 @@ export class FS {
     const writable = await target.handle.createWritable({ keepExistingData: false });
     await writable.write(await source.blob.arrayBuffer());
     await writable.close();
-    // recover saved blob
-    target.blob = await target.handle.getFile();
+    target.blob = await target.handle.getFile(); // recover saved blob
+    target.state = source.state ? {...source.state} : undefined; // copy cached state
     this.registerFile(target);
   }
 
   // pathing
   getPath(entry: FS_Entry, noRoot = false, noFileName = false) {
-    let path = (!noFileName || entry.kind !== "file") ? "/" + entry.handle.name : "";
+    let path = (!noFileName || entry.kind !== "file") ? "/" + entry.handle.name : "/";
     let dir = entry;
     while (dir.parent) {
       dir = dir.parent;
@@ -154,8 +183,8 @@ export class FS {
     return path;
   }
 
-  getURL(entry: FS_Entry) {
-    return normalizePath(this.getPath(entry));
+  getRelativeURL(entry: FS_Entry) {
+    return normalizePath(this.getPath(entry, true));
   }
 
   resolvePath(path: string, dir?: FS_Dir): FS_File | null {
@@ -188,15 +217,34 @@ export class FS {
 
   // registering files in the file-map
   registerFile(file: FS_File): true {
-    const path = this.getURL(file);
+    const path = this.getRelativeURL(file);
     this.vfs.set(path, file.blob);
+    if (this.live) this.addToVFS([file]);
     return true;
   }
 
   // deregistering files in the file-map
   deregisterFile(file: FS_File): boolean {
-    const path = this.getURL(file);
-    return this.vfs.delete(path);
+    const path = this.getRelativeURL(file);
+    const ret = this.vfs.delete(path);
+    if (ret && this.live) this.removePathsFromVFS([path]);
+    return ret;
+  }
+
+  // getters
+  getSortedChildren(dir: FS_Dir): { dirs: FS_Dir[], files: FS_File[] } {
+    const dirs: FS_Dir[] = [];
+    const files: FS_File[] = [];
+
+    for (const entry of dir.map.values()) {
+      switch (entry.kind) {
+        case 'dir': dirs.push(entry); break;
+        case 'file': files.push(entry); break;
+      }
+    }
+    dirs.sort((a, b) => a.handle.name.localeCompare(b.handle.name));
+    files.sort((a, b) => a.handle.name.localeCompare(b.handle.name));
+    return { dirs, files };
   }
 
   // vfs utils
@@ -208,20 +256,29 @@ export class FS {
     });
   }
 
-  addToVFS(file: FS_File) {
+  addToVFS(files: FS_File[]) {
     if (!navigator.serviceWorker.controller) return;
     navigator.serviceWorker.controller.postMessage({
       type: 'UPDATE_FILES',
-      files: [[this.getURL(file), file.blob]]
+      files: files.map((f) => [this.getRelativeURL(f), f.blob])
     });
   }
 
-  removeFromVFS(file: FS_File) {
+  removeFileFromVFS(file: FS_File) {
+    this.removePathsFromVFS([this.getRelativeURL(file)]);
+  }
+
+  removePathsFromVFS(paths: string[]) {
     if (!navigator.serviceWorker.controller) return;
     navigator.serviceWorker.controller.postMessage({
       type: 'REMOVE_FILES',
-      files: [this.getURL(file)]
+      files: paths,
     });
+  }
+
+  // helpers
+  equalEntry(a: FS_Entry, b: FS_Entry) {
+    return this.getPath(a) === this.getPath(b);
   }
 }
 

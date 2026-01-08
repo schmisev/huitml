@@ -13,9 +13,9 @@
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
-	import { FS, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs';
+	import { FS, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs.svelte';
 
-  // setup
+	// setup
 	let view: EditorView | undefined = $state();
 	let folder: FileSystemDirectoryHandle | undefined = $state();
 	let fs: FS = new FS();
@@ -28,18 +28,16 @@
 	async function loadFolder() {
 		try {
 			folder = await window.showDirectoryPicker();
-			fs.open(folder);
-      fs.setVFS();
+			await fs.open(folder);
 		} catch (e) {
 			return;
 		}
 	}
 
-	async function reloadFolder(folder?: FS_Dir) {
+	async function reloadFolder() {
 		if (!folder) return;
 		try {
-			fs.openDir(folder.handle, folder.parent);
-			fs.setVFS();
+			await fs.open(folder);
 		} catch (e) {
 			console.error(e);
 			return;
@@ -57,13 +55,13 @@
 	}
 
 	async function saveTab() {
-    if (!tab) return;
-		fs.saveFile(tab);
+		if (!tab) return;
+		await fs.saveFile(tab);
 	}
 
 	function revertTab(tab?: FS_File) {
-		if (!tab?.doc) return;
-		tab.doc.txt = tab.doc?.lastTxt;
+		if (!tab?.state) return;
+		tab.state.doc = tab.state.cachedDoc;
 	}
 
 	async function gotoFileInTab(path: string) {
@@ -71,7 +69,7 @@
 		if (path.search(base) === 0) {
 			if (!fs) return;
 			const reducedPath = path.replace(base, '').replace('preview', '');
-			const dir = openPath(reducedPath, fs);
+			const dir = fs.resolvePath(reducedPath);
 			if (!dir) {
 				if (tab) showFileInTab(tab);
 				// window.open(path);
@@ -94,28 +92,30 @@
 		if (!view) return;
 		const range = view.state.selection.ranges[0];
 		const insertText = range.empty ? template(defaultContent) : template(view.state.doc.sliceString(range.from, range.to));
-		view.dispatch({
+		const indent = view.state.doc.lineAt(range.from).text.match(/^\s*/)?.[0] || "";
+    const indentedText = insertText.split("\n").map((l, i) => i ? indent + l : l).join("\n");
+    view.dispatch({
 			changes: {
 				from: range.from,
 				to: range.to,
-				insert: insertText
+				insert: indentedText
 			},
 			selection: { anchor: range.to + 1 }
 		});
 	}
 
 	async function undoEdit() {
-		if (!tab?.doc) return;
+		if (!tab?.state) return;
 		if (!view) return;
 		undo(view);
 	}
 
 	async function autoformat() {
-		if (!tab?.doc) return;
+		if (!tab?.state) return;
 		if (!view) return;
 
 		if (tab.blob.type.endsWith('html')) {
-			const newDoc = await prettier.format(tab.doc.txt, { parser: 'html', plugins: [parserHTML] });
+			const newDoc = await prettier.format(tab.state.doc, { parser: 'html', plugins: [parserHTML] });
 			view.dispatch({
 				changes: {
 					from: 0,
@@ -124,7 +124,7 @@
 				}
 			});
 		} else if (tab.blob.type.endsWith('css')) {
-			const newDoc = await prettier.format(tab.doc.txt, { parser: 'css', plugins: [parserCSS] });
+			const newDoc = await prettier.format(tab.state.doc, { parser: 'css', plugins: [parserCSS] });
 			view.dispatch({
 				changes: {
 					from: 0,
@@ -166,33 +166,31 @@
 	async function createFileFromTemplate(template: FileTemplate, entry?: FS_Dir | FS_File) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
-		const pathToFolder = getPathToFile(entry, false, false);
+		const pathToFolder = fs.getPath(entry, false, false);
 		let fileName = prompt(`Es wird eine neue Datei im Ordner ${pathToFolder} erzeugt.\nGib den Dateinamen an: _________${template.ext}`);
 		if (!fileName) return;
 		if (!fileName.endsWith(template.ext)) fileName += template.ext;
 		if (!isValidFilename(fileName)) return;
-		const file = await createNewFile(entry, fileName);
+		const file = await fs.createFile(entry, fileName);
 		if (!file) return;
 
-		file.doc = {
-			txt: template.doc,
-			lastTxt: template.doc
+		file.state = {
+			doc: template.doc,
+			cachedDoc: "",
 		};
 
-		await saveFile(file);
-		await reloadFolder(fs);
+    await fs.saveFile(file);
 		showFileInTab(file);
 	}
 
 	async function renameFile(file?: FS_File) {
 		if (!file) return;
 
-		const pathToFile = getPathToFile(file, false, false);
+		const pathToFile = fs.getPath(file);
 		let fileName = prompt(`Die Datei ${pathToFile} wird umbenannt.\nGib einen neuen Dateinamen an:`, file.handle.name);
 		if (!fileName || !isValidFilename(fileName)) return;
-		const movedFile = await moveFile(file, undefined, fileName);
+		const movedFile = await fs.moveFile(file, undefined, fileName);
 		if (!movedFile) return;
-		await reloadFolder(fs);
 		showFileInTab(movedFile);
 	}
 
@@ -201,9 +199,8 @@
 
 		switch (dragged.kind) {
 			case 'file':
-				const newFile = await moveFile(dragged, target);
+				const newFile = await fs.moveFile(dragged, target);
 				if (!newFile) return;
-				await reloadFolder(fs);
 				showFileInTab(newFile);
 				dragged = undefined;
 				break;
@@ -216,24 +213,22 @@
 		if (!folder) return;
 		if (!confirm('Bist du dir sicher, dass du den Ordner umbenennen willst? Es kann sehr lange dauern!')) return;
 
-		const pathToFile = getPathToFile(folder, false, false);
+		const pathToFile = fs.getPath(folder);
 		let fileName = prompt(`Der Ordner ${pathToFile} wird umbenannt.\nGib einen neuen Ordnernamen an:`, folder.handle.name);
 		if (!fileName || !isValidFilename(fileName)) return;
-		const movedFolder = await moveFolder(folder, undefined, fileName);
+		const movedFolder = await fs.moveFolder(folder, undefined, fileName);
 		if (!movedFolder) return;
-		await reloadFolder(fs);
 	}
 
 	async function createFile(entry?: FS_Dir | FS_File) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 
-		const pathToFolder = getPathToFile(entry, false, false);
+		const pathToFolder = fs.getPath(entry);
 		let fileName = prompt(`Es wird ein neuer Ordner ${pathToFolder} erzeugt.\nGib den Ordnernamen an:`);
 		if (!fileName || !isValidFilename(fileName)) return;
-		const file = await createNewFile(entry, fileName);
+		const file = await fs.createFile(entry, fileName);
 		if (!file) return;
-		await reloadFolder(fs);
 		showFileInTab(file);
 	}
 
@@ -243,27 +238,27 @@
 
 		const fileName = prompt('Gib den Ordnernamen an!');
 		if (!fileName || !isValidFilename(fileName)) return;
-		await createNewFolder(entry, fileName);
-		await reloadFolder(fs);
+		await fs.createDir(entry, fileName);
 	}
 
 	async function deleteEntryInEditor(entry: FS_Dir | FS_File) {
 		const ret = confirm(`Willst du die Datei "${entry.handle.name}" wirklich löschen?`);
 		if (ret) {
-			await deleteEntry(entry);
-			await reloadFolder(fs);
+			await fs.removeEntry(entry);
 		}
 	}
 
 	onMount(() => {
-		window.onfocus = async (e) => {
+		/*
+    window.onfocus = async (e) => {
 			await reloadFolder(fs);
 		};
+    */
 
 		document.onkeydown = (e) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
 				e.preventDefault();
-				saveTab(tab);
+				saveTab();
 			}
 		};
 	});
@@ -272,6 +267,7 @@
 {#snippet showTools(tab: FS_File)}
 	{#if tab.blob.type.endsWith('html')}
 		<div class="flex flex-row flex-wrap gap-1">
+      <!-- INLINE -->
 			<button
 				class="button medium"
 				onclick={() => {
@@ -312,12 +308,27 @@
 				title="Button">
 				<span class="border rounded-md pl-2 pr-2">{'<button>'}</span>
 			</button>
+      <button
+				class="button medium"
+				onclick={() => {
+					insertText(
+						(content) => `<link href="${content}" rel="stylesheet">`,
+						'style.css'
+					);
+				}}
+				title="Style-Link">
+				{'<link "stylesheet">'}
+			</button>
 		</div>
+    <!-- BLOCKS -->
 		<div class="flex flex-row flex-wrap gap-1">
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `\n<div>\n${content}\n</div>\n`, 'Neue Einteilung');
+					insertText((content) => `
+<div>
+${content}
+</div>`, 'Neue Einteilung');
 				}}
 				title="Einteilung">
 				{'<div>'}
@@ -325,7 +336,10 @@
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `\n<p>\n${content}\n</p>\n`, 'Neuer Paragraph');
+					insertText((content) => `
+<p>
+${content}
+</p>`, 'Neuer Paragraph');
 				}}
 				title="Paragraph">
 				{'<p>'}
@@ -333,7 +347,11 @@
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `\n<ul>\n<li>${content}</li>\n<li>...</li>\n</ul>\n`, 'Erstes Listenelement');
+					insertText((content) => `
+<ul>
+  <li>${content}</li>
+  <li>...</li>
+</ul>`, 'Erstes Listenelement');
 				}}
 				title="Ungeordnete Liste">
 				{'● <ul>'}
@@ -341,7 +359,11 @@
 			<button
 				class="button medium"
 				onclick={() => {
-					insertText((content) => `\n<ol>\n<li>${content}</li>\n<li>...</li>\n</ol>\n`, 'Erstes Listenelement');
+					insertText((content) => `
+<ol>
+  <li>${content}</li>
+  <li>...</li>
+</ol>`, 'Erstes Listenelement');
 				}}
 				title="Geordnete Liste">
 				{'1. <ol>'}
@@ -350,9 +372,15 @@
 				class="button medium"
 				onclick={() => {
 					insertText(
-						(content) => `\n<table border="1" width="100%">\n<tr>\n<th>${content}</th>\n</tr>\n<tr>\n<td>${content}</td>\n</tr>\n</table>\n`,
-						'Inhalt'
-					);
+						(content) => `
+<table border="1" width="100%">
+  <tr>
+    <th>${content}</th>
+  </tr>
+  <tr>
+    <td>${content}</td>
+  </tr>
+</table>`, 'Inhalt');
 				}}
 				title="Tabelle">
 				{'<table>'}
@@ -362,26 +390,33 @@
 {/snippet}
 
 {#snippet showFolder(root: FS_Dir)}
+	{@const { dirs, files } = fs.getSortedChildren(root)}
+	{@const deselect = (
+		ev: DragEvent & {
+			currentTarget: EventTarget & HTMLDivElement;
+		}
+	) => {
+		ev.stopPropagation();
+		ev.preventDefault();
+		ev.currentTarget.classList.remove('selected');
+	}}
+	{@const select = (
+		ev: DragEvent & {
+			currentTarget: EventTarget & HTMLDivElement;
+		}
+	) => {
+		ev.stopPropagation();
+		ev.preventDefault();
+		ev.currentTarget.classList.add('selected');
+	}}
 	<div
 		role="button"
 		tabindex="-1"
 		class="container folder"
-		class:selected={root === selected}
-		ondragover={(ev) => {
-			ev.stopPropagation();
-			ev.preventDefault();
-			ev.currentTarget.classList.add('selected');
-		}}
-		ondragleave={(ev) => {
-			ev.stopPropagation();
-			ev.preventDefault();
-			ev.currentTarget.classList.remove('selected');
-		}}
-		ondragend={(ev) => {
-			ev.stopPropagation();
-			ev.preventDefault();
-			ev.currentTarget.classList.remove('selected');
-		}}
+		class:selected={selected && fs.equalEntry(selected, root)}
+		ondragover={select}
+		ondragleave={deselect}
+		ondragend={deselect}
 		ondrop={async (ev) => {
 			ev.stopPropagation();
 			ev.preventDefault();
@@ -392,30 +427,28 @@
 			<button class="text-left grow hover:cursor-pointer" onclick={() => selectFolder(root)}>
 				📂 {root.handle.name}
 			</button>
-			{#if selected === root}
+			{#if selected === root && root.parent}
 				<button class="button small" title="Datei umbenennen" onclick={() => renameFolder(root)}> ✏️ </button>
 				<button class="button small" title="Lösche Ordner" onclick={() => deleteEntryInEditor(root)}> ❌ </button>
 			{/if}
 		</div>
-		{#each Object.keys(root.folders).toSorted() as name}
-			{@const folder = root.folders[name]}
-			{@render showFolder(folder)}
+
+		{#each dirs as dir}
+			{@render showFolder(dir)}
 		{/each}
-		{#each Object.keys(root.files).toSorted() as name}
-			{@const file = root.files[name]}
+		{#each files as file}
 			<div class="flex flex-row gap-1">
 				<button
 					draggable="true"
 					class="button file grow flex flex-row cursor-grab"
-					class:selected={file === selected}
+					class:selected={selected === file}
 					onclick={() => showFileInTab(file)}
 					ondragstart={(ev) => {
 						dragged = file;
 					}}>
-					<span class="grow">{file.handle.name}</span>
-					<span class="text-white">{file.doc?.txt === file.doc?.lastTxt ? '' : '●'}</span>
+					<span class="grow">{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>
 				</button>
-				{#if file === selected}
+				{#if selected && fs.equalEntry(selected, file)}
 					<button class="button small" title="Datei umbenennen" onclick={() => renameFile(file)}> ✏️ </button>
 					<button class="button small" title="Lösche Datei" onclick={() => deleteEntryInEditor(file)}> ❌ </button>
 				{/if}
@@ -439,13 +472,13 @@
 					<div class="border-t-2 border-white"></div>
 					{#if folder}
 						<div class="flex flex-row gap-2">
-							<button class="button small" onclick={() => reloadFolder(fs)}>↺</button>
+							<button class="button small" onclick={() => reloadFolder()}>↺</button>
 							<button class="button small" onclick={() => createFileFromTemplate(HTML_TEMPLATE, selected)}>+📄 html</button>
 							<button class="button small" onclick={() => createFileFromTemplate(CSS_TEMPLATE, selected)}>+🖌️ css</button>
 							<button class="button small" onclick={() => createFolder(selected)}>+📂 Ordner</button>
 						</div>
-						{#if fs}
-							{@render showFolder(fs)}
+						{#if fs.root}
+							{@render showFolder(fs.root)}
 						{/if}
 					{:else}
 						<div>Kein Ordner geöffnet</div>
@@ -459,24 +492,24 @@
 				{#if tab}
 					<div class="flex flex-row items-center gap-2">
 						<div class="grow">
-							<div class="font-bold">{getPathToFile(tab, false, false)}</div>
-							{#if tab?.doc?.txt !== tab?.doc?.lastTxt}
+							<div class="font-bold">{fs.getPath(tab)}</div>
+							{#if tab?.state?.doc !== tab?.state?.cachedDoc}
 								<button title="Änderungen rückgängig machen!" onclick={() => revertTab(tab)}
 									><u class="cursor-not-allowed">nicht gespeichert</u></button>
 							{:else}
-                <span>aktuell</span>
-              {/if}
+								<span>aktuell</span>
+							{/if}
 						</div>
-						{#if tab.doc}
+						{#if tab.state}
 							<button title="Rückgängig!" class="button" onclick={undoEdit}>⏪</button>
-							<button title="Speichern!" class="button" onclick={() => saveTab(tab)}>💾</button>
+							<button title="Speichern!" class="button" onclick={() => saveTab()}>💾</button>
 							<button title="Formatieren!" class="button whitespace-nowrap" onclick={async () => await autoformat()}>💫</button>
 						{/if}
 					</div>
 					<div class="flex flex-col flex-wrap"></div>
-					{#if tab.doc}
+					{#if tab.state}
 						{@render showTools(tab)}
-						<CodeMirror onready={(e) => (view = e)} bind:value={tab.doc.txt} lang={pickLanguage(tab)}></CodeMirror>
+						<CodeMirror onready={(e) => (view = e)} bind:value={tab.state.doc} lang={pickLanguage(tab)}></CodeMirror>
 					{:else}
 						<div class="label negative">Datei kann nicht editiert werden.</div>
 					{/if}
@@ -488,7 +521,7 @@
 		<Pane>
 			<div class="bg-white h-full p-2">
 				{#if tab}
-					<Preview bind:this={preview} file={tab} gotoFile={gotoFileInTab}></Preview>
+					<Preview bind:this={preview} file={tab} {fs} gotoFile={gotoFileInTab}></Preview>
 				{:else}
 					<div class="label negative">Keine Vorschau!</div>
 				{/if}

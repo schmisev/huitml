@@ -10,7 +10,7 @@ self.addEventListener('message', (event) => {
 			files.set(path, file);
 		}
 		console.log('Updated files:', event.data.files);
-	} else if (event.data?.type === 'UPDATE_FILES') {
+	} else if (event.data?.type === 'REMOVE_FILES') {
     for (const path of event.data.files) {
 			files.delete(path);
 		}

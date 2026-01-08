@@ -1,22 +1,24 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { getPathToFile, openPath, type LocalFile, type LocalFolder } from '$lib/file-system';
 	import { inTag } from '$lib/utils';
 	import { onMount } from 'svelte';
+	import type { FS, FS_File } from '../../fast-fs.svelte';
 
 	let {
 		file,
+    fs,
 		gotoFile
 	}: {
-		file: LocalFile;
+		file: FS_File;
+    fs: FS,
 		gotoFile: (path: string) => void;
 	} = $props();
 
-  let realBase = $derived(getPathToFile(file, true, true))
+  let realBase = $derived(fs.getPath(file, true, true))
 	let base = $derived('/preview' + realBase);
 	let src = $derived(base + file.handle.name);
   let realPath = $derived(realBase + file.handle.name);
-
+  
 	let frame: HTMLIFrameElement | null = $state(null);
 	let doc: HTMLDocument | null = $state(null);
   let title: string = $derived.by(() => doc && doc.title ? doc.title : realPath);
@@ -30,11 +32,12 @@
 	$effect(() => {
 		if (!frame) return;
 		frame.src = resolve(src as "/");
-		if (file.doc) frame.srcdoc = `<base href="${resolve(base as "/")}">${file.doc.txt}`;
+		if (file.state) frame.srcdoc = `<base href="${resolve(base as "/")}">${file.state.doc}`;
 
 		frame.onload = (ev) => {
 			if (!frame) return;
-			doc = frame.contentDocument!;
+      if (!frame.contentDocument) return;
+			doc = frame.contentDocument;
 			for (const a of doc.getElementsByTagName('a')) {
 				a.onclick = (ev) => {
 					ev.preventDefault();
@@ -62,7 +65,7 @@
   </head>
   <body>
     <style>
-      ${file.doc.txt}
+      ${file.state.doc}
     </style>
     <h1>&lt;h1&gt; Dies ist die größte Überschrift &lt;/h1&gt;</h1>
     <h2>&lt;h2&gt; Dies ist eine Überschrift &lt;/h2&gt;</h2>
