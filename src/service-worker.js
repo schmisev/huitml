@@ -1,7 +1,6 @@
 let files = new Map();
 
 self.addEventListener('message', (event) => {
-	console.log(event);
 	if (event.data?.type === 'SET_FILES') {
 		files = new Map(event.data.files);
 		console.log('Set files:', event.data.files);
@@ -21,25 +20,25 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
 	const url = new URL(event.request.url);
 
-	// console.log('Trying to handle:', url.pathname);
+	console.log('Trying to handle:', url.pathname);
 
 	if (!url.pathname.startsWith('/preview/') && !url.pathname.startsWith('/huitml/preview/')) {
-		// console.log('Could not handle:', url.pathname);
+		console.log('Could not handle:', url.pathname);
 		return;
 	}
 
 	const path = url.pathname.replace("/huitml", '').replace('/preview', '') || '/index.html';
-  // console.log(path);
+  console.log(path);
 
 	if (!files.has(path)) {
-    // console.log("Not found", files);
+    console.log("Not found", files);
 		event.respondWith(new Response('Not found', { status: 404 }));
 		return;
 	}
 
 	const file = files.get(path);
   
-  // console.log("Found file:", file);
+  console.log("Found file:", file);
 	event.respondWith(
 		new Response(file, {
 			headers: { 'Content-Type': file.type || guessType(path) }

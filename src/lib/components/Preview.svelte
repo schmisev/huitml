@@ -3,40 +3,47 @@
 	import { inTag } from '$lib/utils';
 	import { onMount } from 'svelte';
 	import type { FS, FS_File } from '../../fast-fs.svelte';
+	import refreshIcon from '$lib/components/ui-icons/refresh-svgrepo-com.svg';
 
 	let {
 		file,
-    fs,
-		gotoFile
+		fs,
+		gotoFile,
+		preview
 	}: {
 		file: FS_File;
-    fs: FS,
+		fs: FS;
 		gotoFile: (path: string) => void;
+		preview: undefined | FS_File;
 	} = $props();
 
-  let realBase = $derived(fs.getPath(file, true, true))
+	let realBase = $derived(fs.getPath(file, true, true));
 	let base = $derived('/preview' + realBase);
 	let src = $derived(base + file.handle.name);
-  let realPath = $derived(realBase + file.handle.name);
-  
+	let realPath = $derived(realBase + file.handle.name);
+	let previewSrc = $derived('/preview' + fs.getRelativeURL(preview || file));
+  let previewPath = $derived(fs.getPath(preview || file));
+
 	let frame: HTMLIFrameElement | null = $state(null);
+	let browserFrame: HTMLIFrameElement | null = $state(null);
 	let doc: HTMLDocument | null = $state(null);
-  let title: string = $derived.by(() => doc && doc.title ? doc.title : realPath);
+	let title: string = $derived.by(() => (doc && doc.title ? doc.title : realPath));
+	let browseMode: boolean = $derived(!file.handle.name.endsWith('.html'));
 
 	onMount(async () => {
 		await navigator.serviceWorker.ready;
 		if (!navigator.serviceWorker.controller) location.reload(); // ensure control
-		if (frame) frame.src = src;
+		updateFrame();
 	});
 
-	$effect(() => {
+	function updateFrame() {
 		if (!frame) return;
-		frame.src = resolve(src as "/");
-		if (file.state) frame.srcdoc = `<base href="${resolve(base as "/")}">${file.state.doc}`;
+		frame.src = resolve(src as '/');
+		if (file.state) frame.srcdoc = `${file.state.doc}<base href="${resolve(base as '/')}">`;
 
 		frame.onload = (ev) => {
 			if (!frame) return;
-      if (!frame.contentDocument) return;
+			if (!frame.contentDocument) return;
 			doc = frame.contentDocument;
 			for (const a of doc.getElementsByTagName('a')) {
 				a.onclick = (ev) => {
@@ -45,59 +52,34 @@
 					if (el && 'href' in el) gotoFile(el.href as string);
 				};
 			}
+			console.log('finished on load!');
 		};
+	}
+
+	$effect(updateFrame);
+
+	$effect(() => {
+		$state.snapshot(file.state?.cachedDoc);
+		console.log('reload');
+		browserFrame?.contentWindow?.location.reload();
 	});
 </script>
 
 <div class="w-full h-full flex flex-col gap-2">
-	{#if file.blob.type.startsWith('image')}
-    <div class="label">Bild-Vorschau</div>
-		<img alt="Bild-Vorschau" {src} />
-	{:else if file.blob.type.endsWith('css')}
-    <div class="label">Style-Vorschau</div>
-		<iframe
-			class="grow"
-      title="Style-Vorschau"
-			srcdoc={
-`<html>
-  <head>
-    <title>Style-Vorschau</title>
-  </head>
-  <body>
-    <style>
-      ${file.state.doc}
-    </style>
-    <h1>&lt;h1&gt; Dies ist die größte Überschrift &lt;/h1&gt;</h1>
-    <h2>&lt;h2&gt; Dies ist eine Überschrift &lt;/h2&gt;</h2>
-    <h3>&lt;h3&gt; Und noch eine &lt;/h3&gt;</h3>
-    <h4>&lt;h4&gt; Und noch eine kleinere &lt;/h4&gt;</h4>
-    <h5>&lt;h5&gt; Immer kleiner &lt;/h5&gt;</h5>
-    <h6>&lt;h6&gt; Und kleiner &lt;/h6&gt;</h6>
-    <div>
-      Dies ist ein &lt;div&gt;-Element
-      <div>Und das ist ein &lt;div&gt; im &lt;div&gt;.</div>
-    </div>
-    <p>Dies ist ein &lt;p&gt;-Element (Paragraph) mit...
-    <ul>
-      <li>${inTag("u", "unterstrichenem")}</li>
-      <li>${inTag("b", "fettem")}</li>
-      <li>${inTag("i", "kursivem")}</li>
-      <li>${inTag("s", "durchgestrichenem")}</li>
-      <li>${inTag("sub", "tiefgestellten")}</li>
-      <li>${inTag("sup", "hochgestellten")}</li>
-    </ul>
-    ... Text in einer ungeordneten Liste (&lt;ul&gt;).
-    <p>Und noch eins, mit etwas mehr Text: Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.</p>
-    <figure>
-      <img style="width: 100%" src="https://www.windowslatest.com/wp-content/uploads/2024/10/Windows-XP-Bliss-Wallpaper-4K-1068x712.jpg">      
-      <figcaption>Hier ist ein Bild in einem &lt;img&gt;-Tag - in einem &lt;figure&gt;-Tag.</figcaption>
-    </figure>
-  </body>
-</html>`}
-		>
-		</iframe>
-	{:else}
-    <div class="label">{title}</div>
-		<iframe class="grow" title="Vorschau" bind:this={frame}></iframe>
-	{/if}
+	<div class="flex flex-row flex-nowrap gap-2 overflow-visible">
+		<button class="button neutral grow flex flex-row items-center"onclick={() => {
+				frame?.contentWindow?.location.reload();
+				browserFrame?.contentWindow?.location.reload();
+			}}>
+			<div class="flex-grow">{title}</div>
+      <img class="h-5" src={refreshIcon} />
+    </button>
+	</div>
+	<iframe
+		hidden={!browseMode}
+		class="grow bg-white border-2 border-blue-300 rounded-md"
+		title="Browser"
+		bind:this={browserFrame}
+		src={resolve(previewSrc as '/')}></iframe>
+	<iframe hidden={browseMode} class="grow bg-white border-2 border-gray-300 rounded-md" title="Vorschau" bind:this={frame}></iframe>
 </div>

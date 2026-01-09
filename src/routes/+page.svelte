@@ -7,6 +7,8 @@
 	import trashIcon from '$lib/components/ui-icons/trash-2-svgrepo-com.svg';
 	import laptopIcon from '$lib/components/ui-icons/laptop-svgrepo-com.svg';
 	import refreshIcon from '$lib/components/ui-icons/refresh-svgrepo-com.svg';
+  import eyeIcon from '$lib/components/ui-icons/eye-open-svgrepo-com.svg';
+  import eyeOffIcon from '$lib/components/ui-icons/eye-off-svgrepo-com.svg';
 
 	import { html } from '@codemirror/lang-html';
 	import { css } from '@codemirror/lang-css';
@@ -17,13 +19,13 @@
 	import isValidFilename from 'valid-filename';
 	import Preview from '$lib/components/Preview.svelte';
 	import { onMount } from 'svelte';
-	import codeIcon from '$lib/images/code.svg';
 	import type { EditorView } from 'codemirror';
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
-	import { FS, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs.svelte';
+	import { FS, type FS_FileTemplate, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs.svelte';
 	import FileIcon from '$lib/components/FileIcon.svelte';
+	import Prompt from '$lib/components/Prompt.svelte';
 
 	// setup
 	let view: EditorView | undefined = $state();
@@ -32,14 +34,15 @@
 	let tab: FS_File | undefined = $state();
 	let selected: FS_Entry | undefined = $state();
 	let dragged: FS_Entry | undefined = $state();
-	let preview: Preview | undefined = $state();
+	let preview: FS_File | undefined = $state();
+	let simplePrompt: Prompt;
 
 	// loading
 	async function loadOPFS() {
 		try {
 			root = await navigator.storage.getDirectory();
 			await fs.open(root);
-      noTab();
+			noTab();
 		} catch (e) {
 			console.error(e);
 			return;
@@ -50,7 +53,7 @@
 		try {
 			root = await window.showDirectoryPicker();
 			await fs.open(root);
-      noTab();
+			noTab();
 		} catch (e) {
 			return;
 		}
@@ -60,7 +63,7 @@
 		if (!root) return;
 		try {
 			await fs.open(root);
-      noTab();
+			noTab();
 		} catch (e) {
 			console.error(e);
 			return;
@@ -68,10 +71,10 @@
 	}
 
 	// tab manipulation
-  function noTab() {
-    selected = undefined;
-    tab = undefined;
-  }
+	function noTab() {
+		selected = undefined;
+		tab = undefined;
+	}
 
 	function showFileInTab(file: FS_File) {
 		tab = file;
@@ -97,16 +100,21 @@
 		if (path.search(base) === 0) {
 			if (!fs) return;
 			const reducedPath = path.replace(base, '').replace('preview', '');
-			const dir = fs.resolvePath(reducedPath);
-			if (!dir) {
+			const file = fs.resolveURL(reducedPath);
+      if (!file) {
 				if (tab) showFileInTab(tab);
 				// window.open(path);
 				return;
 			}
-			showFileInTab(dir);
+			showFileInTab(file);
 		} else {
 			window.open(path);
 		}
+	}
+
+	function togglePreviewFile(file: FS_File) {
+    if (preview === file) preview = undefined;
+		else preview = file;
 	}
 
 	// codemirror
@@ -145,7 +153,7 @@
 		if (!tab?.state) return;
 		if (!view) return;
 
-		if (tab.blob.type.endsWith('html')) {
+		if (tab.handle.name.endsWith('html')) {
 			const newDoc = await prettier.format(tab.state.doc, { parser: 'html', plugins: [parserHTML] });
 			view.dispatch({
 				changes: {
@@ -154,7 +162,7 @@
 					insert: newDoc
 				}
 			});
-		} else if (tab.blob.type.endsWith('css')) {
+		} else if (tab.handle.name.endsWith('css')) {
 			const newDoc = await prettier.format(tab.state.doc, { parser: 'css', plugins: [parserCSS] });
 			view.dispatch({
 				changes: {
@@ -166,15 +174,11 @@
 		}
 	}
 
-	// file management
-	interface FileTemplate {
-		ext: `.${string}`;
-		doc: string;
-	}
-
-	const HTML_TEMPLATE: FileTemplate = {
-		doc: `<html>
+	const HTML_TEMPLATE: FS_FileTemplate = {
+		doc: `<!DOCTYPE html>
+<html>
   <head>
+    <meta charset="utf-8" />
     <title>Noch kein Titel</title>
   </head>
   <body>
@@ -184,7 +188,7 @@
 		ext: '.html'
 	};
 
-	const CSS_TEMPLATE: FileTemplate = {
+	const CSS_TEMPLATE: FS_FileTemplate = {
 		doc: `div {
   background-color: lightblue;
   border: 2px solid red;
@@ -194,11 +198,43 @@
 		ext: '.css'
 	};
 
-	async function createFileFromTemplate(template: FileTemplate, entry?: FS_Dir | FS_File) {
+	// create
+	async function createFile(entry?: FS_Dir | FS_File) {
+		if (!entry) return;
+		if (entry.kind === 'file') entry = entry.parent;
+
+		const pathToFolder = fs.getPath(entry);
+		const state = await simplePrompt.open({
+			title: 'Datei erstellen',
+			body: `Du bist dabei, eine Neue Datei im Ordner <b>${pathToFolder}</b> zu erstellen.`,
+			inputLabel: 'Dateiname:',
+			inputExt: '(Gib eine Dateiendung an!)',
+			valuePreset: `neue-datei`
+		});
+
+		let fileName = state.value;
+		if (!fileName || !isValidFilename(fileName)) return;
+		const file = await fs.createFile(entry, fileName);
+		if (!file) return;
+		showFileInTab(file);
+	}
+
+	async function createFileFromTemplate(template: FS_FileTemplate, entry?: FS_Dir | FS_File) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 		const pathToFolder = fs.getPath(entry, false, false);
-		let fileName = prompt(`Es wird eine neue Datei im Ordner ${pathToFolder} erzeugt.\nGib den Dateinamen an: _________${template.ext}`);
+
+		const state = await simplePrompt.open({
+			title: `${template.ext}-Datei erstellen`,
+			body: `Du bist dabei, eine neue Datei im Ordner <b>${pathToFolder}</b> zu erstellen.`,
+			inputLabel: 'Dateiname:',
+			inputExt: `${template.ext}`,
+			valuePreset: `neue-datei`
+		});
+
+		let fileName = state.value;
+		// let fileName = prompt(`Es wird eine neue Datei im Ordner ${pathToFolder} erzeugt.\nGib den Dateinamen an: _________${template.ext}`);
+
 		if (!fileName) return;
 		if (!fileName.endsWith(template.ext)) fileName += template.ext;
 		if (!isValidFilename(fileName)) return;
@@ -214,15 +250,21 @@
 		showFileInTab(file);
 	}
 
-	async function renameFile(file?: FS_File) {
-		if (!file) return;
+	async function createFolder(entry?: FS_Dir | FS_File) {
+		if (!entry) return;
+		if (entry.kind === 'file') entry = entry.parent;
 
-		const pathToFile = fs.getPath(file);
-		let fileName = prompt(`Die Datei ${pathToFile} wird umbenannt.\nGib einen neuen Dateinamen an:`, file.handle.name);
+		const pathToFolder = fs.getPath(entry);
+		const state = await simplePrompt.open({
+			title: 'Ordner erstellen',
+			body: `Du bist dabei, einen neue Ordner in <b>${pathToFolder}</b> zu erstellen.`,
+			inputLabel: 'Ordnername:',
+			valuePreset: `neuer-ordner`
+		});
+
+		let fileName = state.value;
 		if (!fileName || !isValidFilename(fileName)) return;
-		const movedFile = await fs.moveFile(file, undefined, fileName);
-		if (!movedFile) return;
-		showFileInTab(movedFile);
+		await fs.createDir(entry, fileName);
 	}
 
 	async function dropDraggedEntry(target: FS_Dir) {
@@ -240,43 +282,64 @@
 		}
 	}
 
+	// renames
 	async function renameFolder(folder?: FS_Dir) {
 		if (!folder) return;
-		if (!confirm('Bist du dir sicher, dass du den Ordner umbenennen willst? Es kann sehr lange dauern!')) return;
-
 		const pathToFile = fs.getPath(folder);
-		let fileName = prompt(`Der Ordner ${pathToFile} wird umbenannt.\nGib einen neuen Ordnernamen an:`, folder.handle.name);
+
+		const check = await simplePrompt.open({
+			titleClass: 'warning',
+			title: 'Warnung',
+			body: `Bist du sicher, dass du <b>${pathToFile}</b> wirklich umbenennen willst? Das kann sehr lange dauern!`,
+			onlyConfirm: true
+		});
+		if (!check.result) return;
+
+		const state = await simplePrompt.open({
+			icon: renameIcon,
+			title: 'Datei umbennen',
+			body: `Du bist dabei, den Ordner <b>${pathToFile}</b> umzubenennen!`,
+			inputLabel: 'Neuer Name:',
+			valuePreset: folder.handle.name
+		});
+
+		let fileName = state.value;
 		if (!fileName || !isValidFilename(fileName)) return;
 		const movedFolder = await fs.moveFolder(folder, undefined, fileName);
 		if (!movedFolder) return;
 	}
 
-	async function createFile(entry?: FS_Dir | FS_File) {
-		if (!entry) return;
-		if (entry.kind === 'file') entry = entry.parent;
-
-		const pathToFolder = fs.getPath(entry);
-		let fileName = prompt(`Es wird ein neuer Ordner ${pathToFolder} erzeugt.\nGib den Ordnernamen an:`);
-		if (!fileName || !isValidFilename(fileName)) return;
-		const file = await fs.createFile(entry, fileName);
+	async function renameFile(file?: FS_File) {
 		if (!file) return;
-		showFileInTab(file);
-	}
 
-	async function createFolder(entry?: FS_Dir | FS_File) {
-		if (!entry) return;
-		if (entry.kind === 'file') entry = entry.parent;
+		const pathToFile = fs.getPath(file);
+		const state = await simplePrompt.open({
+			title: 'Datei umbennen',
+			body: `Du bist dabei, die Datei <b>${pathToFile}</b> umzubenennen!`,
+			inputLabel: 'Neue Name:',
+			inputExt: `(Achte auf den Dateityp!)`,
+			valuePreset: file.handle.name
+		});
 
-		const fileName = prompt('Gib den Ordnernamen an!');
+		let fileName = state.value;
 		if (!fileName || !isValidFilename(fileName)) return;
-		await fs.createDir(entry, fileName);
+		const movedFile = await fs.moveFile(file, undefined, fileName);
+		if (!movedFile) return;
+		showFileInTab(movedFile);
 	}
 
 	async function deleteEntryInEditor(entry: FS_Dir | FS_File) {
-		const ret = confirm(`Willst du die Datei "${entry.handle.name}" wirklich löschen?`);
-		if (ret) {
+		const state = await simplePrompt.open({
+			titleClass: 'negative',
+			icon: trashIcon,
+			title: `${entry.kind === 'dir' ? 'Ordner' : 'Datei'} löschen`,
+			body: `Willst ${entry.kind === 'dir' ? 'den Ordner' : 'die Datei'} <b>${entry.handle.name}</b> wirklich löschen?`,
+			onlyConfirm: true
+		});
+
+		if (state.result) {
 			await fs.removeEntry(entry);
-      noTab();
+			noTab();
 		}
 	}
 
@@ -466,17 +529,22 @@ ${content}
 			ev.stopPropagation();
 			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
-      if (!ev.dataTransfer) return await dropDraggedEntry(root);
-      let selectedFile: FS_File | null = null;
-      for (const file of ev.dataTransfer.files) {
-        selectedFile = await fs.createFile(root, file.name, file);
-      }
-      if (selectedFile) showFileInTab(selectedFile);
+			if (dragged) return await dropDraggedEntry(root);
+			if (!ev.dataTransfer) return;
+			let selectedFile: FS_File | null = null;
+			for (const file of ev.dataTransfer.files) {
+				selectedFile = await fs.createFile(root, file.name, file);
+			}
+			if (selectedFile) showFileInTab(selectedFile);
 		}}>
 		<div class="flex flex-row items-center gap-1">
 			<button
 				class="text-left grow hover:cursor-pointer flex flex-row flex-nowrap overflow-hidden items-center gap-2"
-				onclick={() => selectFolder(root)}>
+				oncontextmenu={(ev) => ev.preventDefault()}
+				onclick={(ev) => {
+					ev.preventDefault();
+					selectFolder(root);
+				}}>
 				<FileIcon file={root}></FileIcon>
 				{root.handle.name || 'Online-Ordner'}
 			</button>
@@ -492,11 +560,23 @@ ${content}
 					draggable="true"
 					class="button file grow flex flex-row items-center cursor-grab gap-2 min-w-0 overflow-hidden"
 					class:selected={selected === file}
-					onclick={() => showFileInTab(file)}
+					oncontextmenu={(ev) => {
+						ev.preventDefault();
+						togglePreviewFile(file);
+					}}
+					onclick={(ev) => {
+						ev.preventDefault();
+						if (ev.button === 0) {
+							showFileInTab(file);
+						} else if (ev.button === 2) {
+							togglePreviewFile(file);
+						}
+					}}
 					ondragstart={(ev) => {
 						dragged = file;
 					}}>
-					<FileIcon {file}></FileIcon><span class="grow">{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>
+					<FileIcon {file}></FileIcon><span class="grow"
+						>{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>{#if file === preview}<img class="w-5" src={eyeIcon}>{/if}
 				</button>
 				{#if selected && fs.equalEntry(selected, file)}
 					<button class="button" title="Datei umbenennen" onclick={() => renameFile(file)}><img class="h-4" src={renameIcon} /></button>
@@ -573,7 +653,7 @@ ${content}
 					<div class="flex flex-col flex-wrap"></div>
 					{#if tab.state}
 						{@render showTools(tab)}
-						<CodeMirror onready={(e) => (view = e)} bind:value={tab.state.doc} lang={pickLanguage(tab)}></CodeMirror>
+						<CodeMirror lineWrapping={true} onready={(e) => (view = e)} bind:value={tab.state.doc} lang={pickLanguage(tab)}></CodeMirror>
 					{:else}
 						<div class="label negative">Datei kann nicht editiert werden.</div>
 					{/if}
@@ -585,11 +665,13 @@ ${content}
 		<Pane>
 			<div class="bg-white h-full p-2">
 				{#if tab}
-					<Preview bind:this={preview} file={tab} {fs} gotoFile={gotoFileInTab}></Preview>
+					<Preview file={tab} {preview} {fs} gotoFile={gotoFileInTab}></Preview>
 				{:else}
 					<div class="label negative">Keine Vorschau!</div>
 				{/if}
 			</div>
 		</Pane>
 	</Splitpanes>
+
+	<Prompt bind:this={simplePrompt}></Prompt>
 </div>
