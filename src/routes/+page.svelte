@@ -466,7 +466,12 @@ ${content}
 			ev.stopPropagation();
 			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
-			await dropDraggedEntry(root);
+      if (!ev.dataTransfer) return await dropDraggedEntry(root);
+      let selectedFile: FS_File | null = null;
+      for (const file of ev.dataTransfer.files) {
+        selectedFile = await fs.createFile(root, file.name, file);
+      }
+      if (selectedFile) showFileInTab(selectedFile);
 		}}>
 		<div class="flex flex-row items-center gap-1">
 			<button

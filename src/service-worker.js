@@ -9,38 +9,37 @@ self.addEventListener('message', (event) => {
 		for (const [path, file] of event.data.files) {
 			files.set(path, file);
 		}
-		console.log('Updated files:', event.data.files);
+		// console.log('Updated files:', event.data.files);
 	} else if (event.data?.type === 'REMOVE_FILES') {
     for (const path of event.data.files) {
 			files.delete(path);
 		}
-		console.log('Removed files:', event.data.files);
+		// console.log('Removed files:', event.data.files);
   }
 });
 
 self.addEventListener('fetch', (event) => {
 	const url = new URL(event.request.url);
 
-	console.log('Trying to handle:', url.pathname);
+	// console.log('Trying to handle:', url.pathname);
 
 	if (!url.pathname.startsWith('/preview/') && !url.pathname.startsWith('/huitml/preview/')) {
-		console.log('Could not handle:', url.pathname);
+		// console.log('Could not handle:', url.pathname);
 		return;
 	}
 
 	const path = url.pathname.replace("/huitml", '').replace('/preview', '') || '/index.html';
-  console.log(path);
+  // console.log(path);
 
 	if (!files.has(path)) {
-    console.log("Not found", files);
+    // console.log("Not found", files);
 		event.respondWith(new Response('Not found', { status: 404 }));
 		return;
 	}
 
 	const file = files.get(path);
-
-  console.log("Found file:", file);
-
+  
+  // console.log("Found file:", file);
 	event.respondWith(
 		new Response(file, {
 			headers: { 'Content-Type': file.type || guessType(path) }

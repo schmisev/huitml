@@ -94,9 +94,14 @@ export class FS {
   }
 
   // file management
-  async createFile(dir: FS_Dir, fileName: string): Promise<FS_File | null> {
+  async createFile(dir: FS_Dir, fileName: string, ext?: File): Promise<FS_File | null> {
     if (dir.map.has(fileName)) return null;
     const handle = await dir.handle.getFileHandle(fileName, { create: true });
+    if (ext) {
+      const writable = await handle.createWritable();
+      await writable.write(await ext.arrayBuffer());
+      await writable.close();
+    }
     return await this.openFile(handle, dir);
   }
 
