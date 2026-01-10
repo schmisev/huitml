@@ -308,7 +308,6 @@ export class FS {
 
 	getRefGraph(gotoFile: (path: string) => void): HuiGraphDefinition {
 		const base = document.URL;
-    console.log("baseURI", base);
 		const fs = this;
 		const nodes = new Set<string>();
 		const edges: HuiEdgeDefinition[] = [];
