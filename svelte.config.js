@@ -18,7 +18,7 @@ const config = {
 			pages: 'build',
 		}),
 		paths: {
-			base: process.env.NODE_ENV === 'production' ? '/huitml' : ''
+			base: process.env.NODE_ENV === 'production' ? '/huitml' : '/huitml'
 		},
 		version: {
 			name: pkg.version

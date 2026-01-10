@@ -307,7 +307,8 @@ export class FS {
 	}
 
 	getRefGraph(gotoFile: (path: string) => void): HuiGraphDefinition {
-		const base = document.baseURI;
+		const base = document.URL;
+    console.log("baseURI", base);
 		const fs = this;
 		const nodes = new Set<string>();
 		const edges: HuiEdgeDefinition[] = [];
@@ -316,7 +317,7 @@ export class FS {
 			switch (entry.kind) {
 				case 'file':
 					if (!entry.state || !entry.handle.name.endsWith('.html')) break;
-          const fileBase = fs.getRelativeURL(entry, true, true);
+          const fileBase = base + fs.getRelativeURL(entry, true, true).slice(1);
 					const url = base + fs.getRelativeURL(entry).slice(1);
 					const doc = entry.state.doc;
 					const refs = getLinks(doc.replace('<head>', `<head><base href="${fileBase}">`));
@@ -327,7 +328,7 @@ export class FS {
 
 					// add found nodes
 					for (let ref of refs) {
-            if (ref === base + fileBase.slice(1)) continue;
+            if (ref === fileBase) continue;
 						const refUrl = ref;
 						console.log('-- ref:', refUrl);
 
@@ -380,7 +381,8 @@ function normalizePath(rawPath: string) {
 
 function reducePath(rawPath: string) {
 	let path = rawPath;
-	const base = document.baseURI;
+	const base = document.URL;
+  console.log("refbase:", base);
 	if (path.startsWith(base)) {
 		path = path.replace(base, '/');
 	}
