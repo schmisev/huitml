@@ -22,7 +22,7 @@
 	let src = $derived(base + file.handle.name);
 	let realPath = $derived(realBase + file.handle.name);
 	let previewSrc = $derived('/preview' + fs.getRelativeURL(preview || file));
-  let previewPath = $derived(fs.getPath(preview || file));
+	let previewPath = $derived(fs.getPath(preview || file));
 
 	let frame: HTMLIFrameElement | null = $state(null);
 	let browserFrame: HTMLIFrameElement | null = $state(null);
@@ -33,27 +33,29 @@
 	onMount(async () => {
 		await navigator.serviceWorker.ready;
 		if (!navigator.serviceWorker.controller) location.reload(); // ensure control
+
+		if (frame)
+			frame.onload = (ev) => {
+				if (!frame) return;
+				if (!frame.contentDocument) return;
+				doc = frame.contentDocument;
+				for (const a of doc.getElementsByTagName('a')) {
+					a.onclick = (ev) => {
+						ev.preventDefault();
+						const el = ev.target;
+						if (el && 'href' in el) gotoFile(el.href as string);
+					};
+				}
+				console.log('finished on load!');
+			};
+
 		updateFrame();
 	});
 
 	function updateFrame() {
 		if (!frame) return;
 		frame.src = resolve(src as '/');
-		if (file.state) frame.srcdoc = `${file.state.doc}<base href="${resolve(base as '/')}">`;
-
-		frame.onload = (ev) => {
-			if (!frame) return;
-			if (!frame.contentDocument) return;
-			doc = frame.contentDocument;
-			for (const a of doc.getElementsByTagName('a')) {
-				a.onclick = (ev) => {
-					ev.preventDefault();
-					const el = ev.target;
-					if (el && 'href' in el) gotoFile(el.href as string);
-				};
-			}
-			console.log('finished on load!');
-		};
+		if (file.state) frame.srcdoc = `<base href="${resolve(base as '/')}">${file.state.doc}`;
 	}
 
 	$effect(updateFrame);
@@ -67,13 +69,15 @@
 
 <div class="w-full h-full flex flex-col gap-2">
 	<div class="flex flex-row flex-nowrap gap-2 overflow-visible">
-		<button class="button neutral grow flex flex-row items-center"onclick={() => {
+		<button
+			class="button neutral grow flex flex-row items-center"
+			onclick={() => {
 				frame?.contentWindow?.location.reload();
 				browserFrame?.contentWindow?.location.reload();
 			}}>
 			<div class="flex-grow">{title}</div>
-      <img class="h-5" src={refreshIcon} />
-    </button>
+			<img class="h-5" src={refreshIcon} />
+		</button>
 	</div>
 	<iframe
 		hidden={!browseMode}

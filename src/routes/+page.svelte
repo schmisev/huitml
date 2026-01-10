@@ -7,8 +7,8 @@
 	import trashIcon from '$lib/components/ui-icons/trash-2-svgrepo-com.svg';
 	import laptopIcon from '$lib/components/ui-icons/laptop-svgrepo-com.svg';
 	import refreshIcon from '$lib/components/ui-icons/refresh-svgrepo-com.svg';
-  import eyeIcon from '$lib/components/ui-icons/eye-open-svgrepo-com.svg';
-  import eyeOffIcon from '$lib/components/ui-icons/eye-off-svgrepo-com.svg';
+	import eyeIcon from '$lib/components/ui-icons/eye-open-svgrepo-com.svg';
+	import eyeOffIcon from '$lib/components/ui-icons/eye-off-svgrepo-com.svg';
 
 	import { html } from '@codemirror/lang-html';
 	import { css } from '@codemirror/lang-css';
@@ -26,15 +26,17 @@
 	import { FS, type FS_FileTemplate, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs.svelte';
 	import FileIcon from '$lib/components/FileIcon.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
+	import Preview2 from '$lib/components/Preview2.svelte';
 
 	// setup
 	let view: EditorView | undefined = $state();
 	let root: FileSystemDirectoryHandle | undefined = $state();
 	let fs: FS = new FS();
 	let tab: FS_File | undefined = $state();
-	let selected: FS_Entry | undefined = $state();
-	let dragged: FS_Entry | undefined = $state();
-	let preview: FS_File | undefined = $state();
+	let selectedFile: FS_Entry | undefined = $state();
+	let draggedFile: FS_Entry | undefined = $state();
+	let previewFile: FS_File | undefined = $state();
+	let previewView: Preview2 | undefined = $state();
 	let simplePrompt: Prompt;
 
 	// loading
@@ -72,22 +74,29 @@
 
 	// tab manipulation
 	function noTab() {
-		selected = undefined;
+		selectedFile = undefined;
 		tab = undefined;
+		previewFile = undefined;
 	}
 
 	function showFileInTab(file: FS_File) {
 		tab = file;
-		selected = file;
+		selectedFile = file;
 	}
 
 	function selectFolder(folder: FS_Dir) {
-		selected = folder;
+		selectedFile = folder;
+	}
+
+  function togglePreviewFile(file: FS_File) {
+		if (previewFile === file) previewFile = undefined;
+		else previewFile = file;
 	}
 
 	async function saveTab() {
 		if (!tab) return;
 		await fs.saveFile(tab);
+		previewView?.reload();
 	}
 
 	function revertTab(tab?: FS_File) {
@@ -101,7 +110,7 @@
 			if (!fs) return;
 			const reducedPath = path.replace(base, '').replace('preview', '');
 			const file = fs.resolveURL(reducedPath);
-      if (!file) {
+			if (!file) {
 				if (tab) showFileInTab(tab);
 				// window.open(path);
 				return;
@@ -110,11 +119,6 @@
 		} else {
 			window.open(path);
 		}
-	}
-
-	function togglePreviewFile(file: FS_File) {
-    if (preview === file) preview = undefined;
-		else preview = file;
 	}
 
 	// codemirror
@@ -268,14 +272,14 @@
 	}
 
 	async function dropDraggedEntry(target: FS_Dir) {
-		if (!dragged) return;
+		if (!draggedFile) return;
 
-		switch (dragged.kind) {
+		switch (draggedFile.kind) {
 			case 'file':
-				const newFile = await fs.moveFile(dragged, target);
+				const newFile = await fs.moveFile(draggedFile, target);
 				if (!newFile) return;
 				showFileInTab(newFile);
-				dragged = undefined;
+				draggedFile = undefined;
 				break;
 			case 'dir':
 				break;
@@ -521,7 +525,7 @@ ${content}
 		role="button"
 		tabindex="-1"
 		class="container folder"
-		class:selected={selected && fs.equalEntry(selected, root)}
+		class:selected={selectedFile && fs.equalEntry(selectedFile, root)}
 		ondragover={select}
 		ondragleave={deselect}
 		ondragend={deselect}
@@ -529,7 +533,7 @@ ${content}
 			ev.stopPropagation();
 			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
-			if (dragged) return await dropDraggedEntry(root);
+			if (draggedFile) return await dropDraggedEntry(root);
 			if (!ev.dataTransfer) return;
 			let selectedFile: FS_File | null = null;
 			for (const file of ev.dataTransfer.files) {
@@ -548,7 +552,7 @@ ${content}
 				<FileIcon file={root}></FileIcon>
 				{root.handle.name || 'Online-Ordner'}
 			</button>
-			{#if selected === root && root.parent}
+			{#if selectedFile === root && root.parent}
 				<button class="button" title="Datei umbenennen" onclick={() => renameFolder(root)}><img class="h-4" src={renameIcon} /></button>
 				<button class="button" title="Lösche Ordner" onclick={() => deleteEntryInEditor(root)}><img class="h-4" src={trashIcon} /></button>
 			{/if}
@@ -559,7 +563,7 @@ ${content}
 				<button
 					draggable="true"
 					class="button file grow flex flex-row items-center cursor-grab gap-2 min-w-0 overflow-hidden"
-					class:selected={selected === file}
+					class:selected={selectedFile === file}
 					oncontextmenu={(ev) => {
 						ev.preventDefault();
 						togglePreviewFile(file);
@@ -573,12 +577,15 @@ ${content}
 						}
 					}}
 					ondragstart={(ev) => {
-						dragged = file;
+						draggedFile = file;
 					}}>
-					<FileIcon {file}></FileIcon><span class="grow"
-						>{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>{#if file === preview}<img class="w-5" src={eyeIcon}>{/if}
+					<FileIcon {file}></FileIcon>
+					{#if file === previewFile}
+						<img class="w-5" src={eyeIcon} />
+					{/if}
+					<span class="grow">{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>
 				</button>
-				{#if selected && fs.equalEntry(selected, file)}
+				{#if selectedFile && fs.equalEntry(selectedFile, file)}
 					<button class="button" title="Datei umbenennen" onclick={() => renameFile(file)}><img class="h-4" src={renameIcon} /></button>
 					<button class="button" title="Lösche Datei" onclick={() => deleteEntryInEditor(file)}><img class="h-4" src={trashIcon} /></button>
 				{/if}
@@ -614,12 +621,12 @@ ${content}
 							<button
 								title="Neues HTML-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selected)}><FileIcon ext="html"></FileIcon></button>
+								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selectedFile)}><FileIcon ext="html"></FileIcon></button>
 							<button
 								title="Neues CSS-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selected)}><FileIcon ext="css"></FileIcon></button>
-							<button title="Neuen Ordner erstellen" class="button inline-flex items-center" onclick={() => createFolder(selected)}
+								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selectedFile)}><FileIcon ext="css"></FileIcon></button>
+							<button title="Neuen Ordner erstellen" class="button inline-flex items-center" onclick={() => createFolder(selectedFile)}
 								><FileIcon ext="dir"></FileIcon></button>
 						</div>
 						{@render showFolder(fs.root)}
@@ -664,11 +671,7 @@ ${content}
 		</Pane>
 		<Pane>
 			<div class="bg-white h-full p-2">
-				{#if tab}
-					<Preview file={tab} {preview} {fs} gotoFile={gotoFileInTab}></Preview>
-				{:else}
-					<div class="label negative">Keine Vorschau!</div>
-				{/if}
+				<Preview2 bind:this={previewView} editFile={tab} {previewFile} {fs} gotoFile={gotoFileInTab}></Preview2>
 			</div>
 		</Pane>
 	</Splitpanes>

@@ -19,23 +19,23 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (event) => {
 	const url = new URL(event.request.url);
-
-	console.log('Trying to handle:', url.pathname);
-
+  
 	if (!url.pathname.startsWith('/preview/') && !url.pathname.startsWith('/huitml/preview/')) {
 		console.log('Could not handle:', url.pathname);
 		return;
 	}
 
 	const path = url.pathname.replace("/huitml", '').replace('/preview', '') || '/index.html';
-  console.log(path);
+  
 
 	if (!files.has(path)) {
+    return;
     console.log("Not found", files);
 		event.respondWith(new Response('Not found', { status: 404 }));
 		return;
 	}
 
+  console.log(path);
 	const file = files.get(path);
   
   console.log("Found file:", file);

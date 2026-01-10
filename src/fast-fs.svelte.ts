@@ -193,8 +193,8 @@ export class FS {
 		return path;
 	}
 
-	getRelativeURL(entry: FS_Entry) {
-		return normalizePath(this.getPath(entry, true));
+	getRelativeURL(entry: FS_Entry, noRoot = true, noFileName = false) {
+		return normalizePath(this.getPath(entry, noRoot, noFileName));
 	}
 
 	resolvePath(path: string, dir?: FS_Dir): FS_File | null {
@@ -306,7 +306,7 @@ export class FS {
 	}
 }
 
-// helper functions
+// helper func1ons
 function normalizePath(rawPath: string) {
 	let url = new URL('data:' + rawPath);
 	return url.pathname;
