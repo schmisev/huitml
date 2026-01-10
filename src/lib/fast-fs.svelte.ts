@@ -1,4 +1,5 @@
 import { SvelteMap } from 'svelte/reactivity';
+import type { HuiEdge, HuiEdgeDefinition, HuiGraphDefinition, HuiNodeDefinition } from './hui-graphs/hui-core';
 
 export type FS_Entry = FS_File | FS_Dir;
 
@@ -209,8 +210,8 @@ export class FS {
 
 		for (const name of segments) {
 			if (name === '.') continue;
-			if (name === '..' && dir.parent) {
-				dir = dir.parent;
+			if (name === '..' && dir!.parent) {
+				dir = dir!.parent;
 				continue;
 			}
 			const next = dir.map.get(name);
@@ -304,12 +305,96 @@ export class FS {
 	equalEntry(a: FS_Entry, b: FS_Entry) {
 		return this.getPath(a) === this.getPath(b);
 	}
+
+	getRefGraph(gotoFile: (path: string) => void): HuiGraphDefinition {
+		const base = document.baseURI;
+		const fs = this;
+		const nodes = new Set<string>();
+		const edges: HuiEdgeDefinition[] = [];
+
+		function collectRefs(entry: FS_Entry) {
+			switch (entry.kind) {
+				case 'file':
+					if (!entry.state || !entry.handle.name.endsWith('.html')) break;
+          const fileBase = fs.getRelativeURL(entry, true, true);
+					const url = base + fs.getRelativeURL(entry).slice(1);
+					const doc = entry.state.doc;
+					const refs = getLinks(doc.replace('<head>', `<head><base href="${fileBase}">`));
+
+					// add node
+					console.log('file:', url);
+					nodes.add(url);
+
+					// add found nodes
+					for (let ref of refs) {
+            if (ref === base + fileBase.slice(1)) continue;
+						const refUrl = ref;
+						console.log('-- ref:', refUrl);
+
+						nodes.add(refUrl);
+						edges.push({
+							fromId: url,
+							toId: refUrl
+						});
+					}
+
+					break;
+				case 'dir':
+					for (const e of entry.map.values()) {
+						collectRefs(e);
+					}
+					break;
+			}
+		}
+
+		if (this.root) collectRefs(this.root);
+
+		const graph: HuiGraphDefinition = {
+			edges,
+			nodes: [
+				...nodes.values().map((v) => {
+					const reducedURL = reducePath(v);
+					const file = fs.resolveURL(reducedURL);
+					const inFS = !!file;
+					const isHTML = !!file?.handle.name.endsWith('.html');
+          const isCSS = !!file?.handle.name.endsWith('.css');
+
+					return {
+						id: v,
+						label: decodeURI(reducedURL),
+						labelOnClick: () => gotoFile(v),
+						labelClasses: ['button', 'node', inFS ? (isHTML ? 'neutral' : isCSS ? 'special' : 'positive') : 'none', 'hover:cursor-pointer']
+					} satisfies HuiNodeDefinition;
+				})
+			]
+		};
+		return graph;
+	}
 }
 
 // helper func1ons
 function normalizePath(rawPath: string) {
 	let url = new URL('data:' + rawPath);
 	return url.pathname;
+}
+
+function reducePath(rawPath: string) {
+	let path = rawPath;
+	const base = document.baseURI;
+	if (path.startsWith(base)) {
+		path = path.replace(base, '/');
+	}
+	return path;
+}
+
+function getLinks(html: string) {
+	const parser = new DOMParser();
+	const doc = parser.parseFromString(html, 'text/html');
+	// @ts-ignore
+	const hrefs = Array.from(doc.querySelectorAll('*[href]')).map((a) => a.href) as string[];
+	// @ts-ignore
+	const srcs = Array.from(doc.querySelectorAll('*[src]')).map((a) => a.src) as string[];
+	return [...hrefs, ...srcs];
 }
 
 export interface FS_FileTemplate {

@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { inTag } from '$lib/utils';
 	import { onMount } from 'svelte';
-	import type { FS, FS_File } from '../../fast-fs.svelte';
+	import type { FS, FS_File } from '../fast-fs.svelte';
 	import refreshIcon from '$lib/components/ui-icons/refresh-svgrepo-com.svg';
 
 	let {

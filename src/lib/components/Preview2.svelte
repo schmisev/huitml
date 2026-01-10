@@ -1,11 +1,9 @@
 <script lang="ts">
-	import type { FS, FS_File } from '../../fast-fs.svelte';
-
-	import refreshIcon from '$lib/components/ui-icons/refresh-svgrepo-com.svg';
-	import eyeIcon from '$lib/components/ui-icons/eye-open-svgrepo-com.svg';
+	import type { FS, FS_File } from '../fast-fs.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { PREVIEW_PREFIX } from '$lib/routing-info';
+	import { eyeIcon, refreshIcon } from '$lib/icons';
 
 	let {
 		fs,
@@ -50,8 +48,8 @@
 	}
 </script>
 
-<div class="w-fulle h-full flex flex-col gap-2">
-	<div hidden={!live} class="w-fulle h-full flex flex-col gap-2">
+<div class="w-full h-full flex flex-col gap-2">
+	<div hidden={!live} class="w-full h-full flex flex-col gap-2">
 		<button class="button stretch negative flex flex-row items-center" onclick={() => frame?.contentWindow?.location.reload()}>
 			<div class="font-bold">LIVE</div>
 			<div class="grow">{editSrc}</div>

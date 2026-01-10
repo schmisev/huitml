@@ -1,15 +1,4 @@
 <script lang="ts">
-	import globeIcon from '$lib/components/ui-icons/globe-1-svgrepo-com.svg';
-	import renameIcon from '$lib/components/ui-icons/edit-2-svgrepo-com.svg';
-	import saveIcon from '$lib/components/ui-icons/save-svgrepo-com.svg';
-	import undoIcon from '$lib/components/ui-icons/undo-svgrepo-com.svg';
-	import wandIcon from '$lib/components/ui-icons/wand-svgrepo-com.svg';
-	import trashIcon from '$lib/components/ui-icons/trash-2-svgrepo-com.svg';
-	import laptopIcon from '$lib/components/ui-icons/laptop-svgrepo-com.svg';
-	import refreshIcon from '$lib/components/ui-icons/refresh-svgrepo-com.svg';
-	import eyeIcon from '$lib/components/ui-icons/eye-open-svgrepo-com.svg';
-	import eyeOffIcon from '$lib/components/ui-icons/eye-off-svgrepo-com.svg';
-
 	import { html } from '@codemirror/lang-html';
 	import { css } from '@codemirror/lang-css';
 	import { javascript } from '@codemirror/lang-javascript';
@@ -17,16 +6,20 @@
 	import { Pane, Splitpanes } from 'svelte-splitpanes';
 	import CodeMirror from 'svelte-codemirror-editor';
 	import isValidFilename from 'valid-filename';
-	import Preview from '$lib/components/Preview.svelte';
 	import { onMount } from 'svelte';
 	import type { EditorView } from 'codemirror';
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
-	import { FS, type FS_FileTemplate, type FS_Dir, type FS_Entry, type FS_File } from '../fast-fs.svelte';
+	import { FS, type FS_FileTemplate, type FS_Dir, type FS_Entry, type FS_File } from '$lib/fast-fs.svelte';
 	import FileIcon from '$lib/components/FileIcon.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
-	import Preview2 from '$lib/components/Preview2.svelte';
+	import { eyeIcon, globeIcon, laptopIcon, refreshIcon, renameIcon, saveIcon, trashIcon, undoIcon, wandIcon } from '$lib/icons';
+	import LiveView from '$lib/components/LiveView.svelte';
+	import FauxBrowser from '$lib/components/FauxBrowser.svelte';
+	import { PREVIEW_PREFIX } from '$lib/routing-info';
+	import { resolve } from '$app/paths';
+	import HuiDagre from '$lib/hui-graphs/HuiDagre.svelte';
 
 	// setup
 	let view: EditorView | undefined = $state();
@@ -36,7 +29,8 @@
 	let selectedFile: FS_Entry | undefined = $state();
 	let draggedFile: FS_Entry | undefined = $state();
 	let previewFile: FS_File | undefined = $state();
-	let previewView: Preview2 | undefined = $state();
+	let fauxBrowser: FauxBrowser | undefined = $state();
+	let liveView: LiveView | undefined = $state();
 	let simplePrompt: Prompt;
 
 	// loading
@@ -88,7 +82,7 @@
 		selectedFile = folder;
 	}
 
-  function togglePreviewFile(file: FS_File) {
+	function togglePreviewFile(file: FS_File) {
 		if (previewFile === file) previewFile = undefined;
 		else previewFile = file;
 	}
@@ -96,7 +90,8 @@
 	async function saveTab() {
 		if (!tab) return;
 		await fs.saveFile(tab);
-		previewView?.reload();
+		fauxBrowser?.reload();
+		liveView?.reload();
 	}
 
 	function revertTab(tab?: FS_File) {
@@ -108,7 +103,8 @@
 		const base = document.baseURI;
 		if (path.search(base) === 0) {
 			if (!fs) return;
-			const reducedPath = path.replace(base, '').replace('preview', '');
+			const reducedPath = path.replace(base, '/').replace('/preview', '');
+      console.log(reducedPath);
 			const file = fs.resolveURL(reducedPath);
 			if (!file) {
 				if (tab) showFileInTab(tab);
@@ -621,11 +617,11 @@ ${content}
 							<button
 								title="Neues HTML-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selectedFile)}><FileIcon ext="html"></FileIcon></button>
+								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selectedFile)}><FileIcon ext=".html"></FileIcon></button>
 							<button
 								title="Neues CSS-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selectedFile)}><FileIcon ext="css"></FileIcon></button>
+								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selectedFile)}><FileIcon ext=".css"></FileIcon></button>
 							<button title="Neuen Ordner erstellen" class="button inline-flex items-center" onclick={() => createFolder(selectedFile)}
 								><FileIcon ext="dir"></FileIcon></button>
 						</div>
@@ -654,7 +650,7 @@ ${content}
 							<button title="Rückgängig!" class="button" onclick={undoEdit}><img class="h-6" src={undoIcon} /></button>
 							<button title="Speichern!" class="button" onclick={() => saveTab()}><img class="h-6" src={saveIcon} /></button>
 							<button title="Formatieren!" class="button whitespace-nowrap" onclick={async () => await autoformat()}
-								><img class="h-6" src={wandIcon} /></button>
+								><img alt="format" class="h-6" src={wandIcon} /></button>
 						{/if}
 					</div>
 					<div class="flex flex-col flex-wrap"></div>
@@ -670,9 +666,37 @@ ${content}
 			</div>
 		</Pane>
 		<Pane>
-			<div class="bg-white h-full p-2">
-				<Preview2 bind:this={previewView} editFile={tab} {previewFile} {fs} gotoFile={gotoFileInTab}></Preview2>
-			</div>
+			<Splitpanes horizontal>
+				<Pane>
+					<div class="h-full w-full p-2 flex flex-col gap-2">
+						{#if tab}
+							{@const src = resolve((PREVIEW_PREFIX + fs.getRelativeURL(tab)) as '/')}
+							{#if tab.blob.type.startsWith('image/')}
+								<div class="w-full h-full flex flex-col gap-2">
+									<button class="button stretch negative text-center flex flex-row items-center">
+										<div class="grow">{src}</div>
+									</button>
+									<div class="overflow-hidden rounded-large standard-shadow border-2 border-red-300 grow bg-white">
+										<img class="max-h-full max-w-full" alt="img" {src} />
+									</div>
+								</div>
+							{:else}
+								<LiveView bind:this={liveView} {fs} editFile={tab} gotoFile={gotoFileInTab}></LiveView>
+							{/if}
+						{/if}
+						{#if previewFile}
+							<FauxBrowser bind:this={fauxBrowser} {fs} {previewFile}></FauxBrowser>
+						{/if}
+					</div>
+				</Pane>
+				<Pane>
+					{#if fs.root}
+						<div class="h-full w-full flex flex-col items-center justify-center">
+							<HuiDagre settings={{ marginx: 10, marginy: 10 }} graphDef={fs.getRefGraph(gotoFileInTab)}></HuiDagre>
+						</div>
+					{/if}
+				</Pane>
+			</Splitpanes>
 		</Pane>
 	</Splitpanes>
 
