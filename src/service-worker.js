@@ -14,6 +14,8 @@ self.addEventListener('message', (event) => {
 			files.delete(path);
 		}
 		// console.log('Removed files:', event.data.files);
+  } else if (event.data?.type === "SEND_INFO") {
+    console.log("info:", "# of files", files.size);
   }
 });
 
@@ -27,9 +29,7 @@ self.addEventListener('fetch', (event) => {
 
 	const path = url.pathname.replace("/huitml", '').replace('/preview', '') || '/index.html';
   
-
 	if (!files.has(path)) {
-    return;
     console.log("Not found", files);
 		event.respondWith(new Response('Not found', { status: 404 }));
 		return;

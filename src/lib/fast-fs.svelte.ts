@@ -1,5 +1,13 @@
 import { SvelteMap } from 'svelte/reactivity';
-import type { HuiEdge, HuiEdgeDefinition, HuiGraphDefinition, HuiNodeDefinition } from './hui-graphs/hui-core';
+import type {
+	HuiEdge,
+	HuiEdgeDefinition,
+	HuiGraphDefinition,
+	HuiNodeDefinition
+} from './hui-graphs/hui-core';
+import { resolve } from '$app/paths';
+
+export const PREVIEW_PREFIX = '/preview';
 
 export type FS_Entry = FS_File | FS_Dir;
 
@@ -55,7 +63,10 @@ export class FS {
 	}
 
 	// constructing new files and directories
-	async openDir(handle: FileSystemDirectoryHandle, parent?: FS_Dir): Promise<FS_Dir> {
+	async openDir(
+		handle: FileSystemDirectoryHandle,
+		parent?: FS_Dir
+	): Promise<FS_Dir> {
 		const newDir: FS_Dir = $state({
 			handle,
 			kind: 'dir',
@@ -77,7 +88,10 @@ export class FS {
 		return newDir;
 	}
 
-	async openFile(handle: FileSystemFileHandle, parent: FS_Dir): Promise<FS_File> {
+	async openFile(
+		handle: FileSystemFileHandle,
+		parent: FS_Dir
+	): Promise<FS_File> {
 		const newFile: FS_File = $state({
 			handle,
 			kind: 'file',
@@ -95,7 +109,11 @@ export class FS {
 	}
 
 	// file management
-	async createFile(dir: FS_Dir, fileName: string, ext?: File): Promise<FS_File | null> {
+	async createFile(
+		dir: FS_Dir,
+		fileName: string,
+		ext?: File
+	): Promise<FS_File | null> {
 		if (dir.map.has(fileName)) return null;
 		const handle = await dir.handle.getFileHandle(fileName, { create: true });
 		if (ext) {
@@ -108,7 +126,9 @@ export class FS {
 
 	async createDir(dir: FS_Dir, dirName: string): Promise<FS_Dir | null> {
 		if (dir.map.has(dirName)) return null;
-		const handle = await dir.handle.getDirectoryHandle(dirName, { create: true });
+		const handle = await dir.handle.getDirectoryHandle(dirName, {
+			create: true
+		});
 		return await this.openDir(handle, dir);
 	}
 
@@ -127,7 +147,11 @@ export class FS {
 		}
 	}
 
-	async moveFile(file: FS_File, target?: FS_Dir, newName?: string): Promise<FS_File | null> {
+	async moveFile(
+		file: FS_File,
+		target?: FS_Dir,
+		newName?: string
+	): Promise<FS_File | null> {
 		if (!file.parent) return null; // can't move unmoored files
 		target = target || file.parent;
 		newName = newName || file.handle.name;
@@ -138,7 +162,11 @@ export class FS {
 		return newFile;
 	}
 
-	async moveFolder(dir: FS_Dir, target?: FS_Dir, newName?: string): Promise<FS_Dir | null> {
+	async moveFolder(
+		dir: FS_Dir,
+		target?: FS_Dir,
+		newName?: string
+	): Promise<FS_Dir | null> {
 		if (!dir.parent) return null; // can't move unmoored dirs
 		target = target || dir.parent;
 		newName = newName || dir.handle.name;
@@ -160,12 +188,16 @@ export class FS {
 
 	async saveFile(file: FS_File): Promise<void> {
 		if (file.state) {
-			const writable = await file.handle.createWritable({ keepExistingData: false });
+			const writable = await file.handle.createWritable({
+				keepExistingData: false
+			});
 			await writable.write(file.state.doc);
 			await writable.close();
 			file.state.cachedDoc = file.state.doc;
 		} else {
-			const writable = await file.handle.createWritable({ keepExistingData: false });
+			const writable = await file.handle.createWritable({
+				keepExistingData: false
+			});
 			await writable.write(await file.blob.arrayBuffer());
 			await writable.close();
 		}
@@ -175,7 +207,9 @@ export class FS {
 	}
 
 	async copyIntoFile(target: FS_File, source: FS_File): Promise<void> {
-		const writable = await target.handle.createWritable({ keepExistingData: false });
+		const writable = await target.handle.createWritable({
+			keepExistingData: false
+		});
 		await writable.write(await source.blob.arrayBuffer());
 		await writable.close();
 		target.blob = await target.handle.getFile(); // recover saved blob
@@ -185,7 +219,8 @@ export class FS {
 
 	// pathing
 	getPath(entry: FS_Entry, noRoot = false, noFileName = false) {
-		let path = !noFileName || entry.kind !== 'file' ? '/' + entry.handle.name : '/';
+		let path =
+			!noFileName || entry.kind !== 'file' ? '/' + entry.handle.name : '/';
 		let dir = entry;
 		while (dir.parent) {
 			dir = dir.parent;
@@ -316,20 +351,22 @@ export class FS {
 			switch (entry.kind) {
 				case 'file':
 					if (!entry.state || !entry.handle.name.endsWith('.html')) break;
-          const fileBase = base + fs.getRelativeURL(entry, true, true).slice(1);
+					const fileBase = base + fs.getRelativeURL(entry, true, true).slice(1);
 					const url = base + fs.getRelativeURL(entry).slice(1);
 					const doc = entry.state.doc;
-					const refs = getLinks(doc.replace('<head>', `<head><base href="${fileBase}">`));
+					const refs = getLinks(
+						doc.replace('<head>', `<head><base href="${fileBase}">`)
+					);
 
 					// add node
-					console.log('file:', url);
+					// console.log('file:', url);
 					nodes.add(url);
 
 					// add found nodes
 					for (let ref of refs) {
-            if (ref === fileBase) continue;
+						if (ref === fileBase) continue;
 						const refUrl = ref;
-						console.log('-- ref:', refUrl);
+						// console.log('-- ref:', refUrl);
 
 						nodes.add(refUrl);
 						edges.push({
@@ -357,13 +394,21 @@ export class FS {
 					const file = fs.resolveURL(reducedURL);
 					const inFS = !!file;
 					const isHTML = !!file?.handle.name.endsWith('.html');
-          const isCSS = !!file?.handle.name.endsWith('.css');
+					const isCSS = !!file?.handle.name.endsWith('.css');
 
 					return {
 						id: v,
-						label: decodeURI(reducedURL),
+						label: `<button class="button ${
+							inFS
+								? isHTML
+									? 'neutral'
+									: isCSS
+										? 'special'
+										: 'positive'
+								: 'none'
+						} hover:cursor-pointer">${decodeURI(reducedURL)}</button>`,
 						labelOnClick: () => gotoFile(v),
-						labelClasses: ['button', 'node', inFS ? (isHTML ? 'neutral' : isCSS ? 'special' : 'positive') : 'none', 'hover:cursor-pointer']
+            labelClasses: ["p-1"]
 					} satisfies HuiNodeDefinition;
 				})
 			]
@@ -374,14 +419,12 @@ export class FS {
 
 // helper func1ons
 function normalizePath(rawPath: string) {
-	let url = new URL('data:' + rawPath);
-	return url.pathname;
+	return encodeURI(rawPath);
 }
 
 function reducePath(rawPath: string) {
 	let path = rawPath;
 	const base = document.URL;
-  console.log("refbase:", base);
 	if (path.startsWith(base)) {
 		path = path.replace(base, '/');
 	}
@@ -392,10 +435,18 @@ function getLinks(html: string) {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(html, 'text/html');
 	// @ts-ignore
-	const hrefs = Array.from(doc.querySelectorAll('*[href]')).map((a) => a.href) as string[];
+	const hrefs = Array.from(doc.querySelectorAll('*[href]')).map(
+		(a) => (a as any).href
+	) as string[];
 	// @ts-ignore
-	const srcs = Array.from(doc.querySelectorAll('*[src]')).map((a) => a.src) as string[];
+	const srcs = Array.from(doc.querySelectorAll('*[src]')).map(
+		(a) => (a as any).src
+	) as string[];
 	return [...hrefs, ...srcs];
+}
+
+export function resolveToPreview(src: string) {
+	return resolve((PREVIEW_PREFIX + src) as '/');
 }
 
 export interface FS_FileTemplate {

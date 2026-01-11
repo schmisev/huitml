@@ -11,15 +11,34 @@
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
-	import { FS, type FS_FileTemplate, type FS_Dir, type FS_Entry, type FS_File } from '$lib/fast-fs.svelte';
+	import {
+		FS,
+		type FS_FileTemplate,
+		type FS_Dir,
+		type FS_Entry,
+		type FS_File,
+		resolveToPreview
+	} from '$lib/fast-fs.svelte';
 	import FileIcon from '$lib/components/FileIcon.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
-	import { eyeIcon, globeIcon, laptopIcon, refreshIcon, renameIcon, saveIcon, trashIcon, undoIcon, wandIcon } from '$lib/icons';
+	import {
+		eyeIcon,
+		globeIcon,
+		imgIcon,
+		laptopIcon,
+		pointerIcon,
+		refreshIcon,
+		renameIcon,
+		saveIcon,
+		tableIcon,
+		trashIcon,
+		undoIcon,
+		wandIcon
+	} from '$lib/icons';
 	import LiveView from '$lib/components/LiveView.svelte';
 	import FauxBrowser from '$lib/components/FauxBrowser.svelte';
-	import { PREVIEW_PREFIX } from '$lib/routing-info';
-	import { resolve } from '$app/paths';
 	import HuiDagre from '$lib/hui-graphs/HuiDagre.svelte';
+	import HuiElk from '$lib/hui-graphs/HuiElk.svelte';
 
 	// setup
 	let view: EditorView | undefined = $state();
@@ -104,7 +123,7 @@
 		if (path.search(base) === 0) {
 			if (!fs) return;
 			const reducedPath = path.replace(base, '/').replace('/preview', '');
-      console.log(reducedPath);
+			console.log(reducedPath);
 			const file = fs.resolveURL(reducedPath);
 			if (!file) {
 				if (tab) showFileInTab(tab);
@@ -124,11 +143,17 @@
 		if (tab.blob.type.endsWith('javascript')) return javascript();
 	}
 
-	async function insertText(template: (content: string) => string, defaultContent: string) {
+	async function insertText(
+		template: (content: string) => string,
+		defaultContent: string
+	) {
 		if (!view) return;
 		const range = view.state.selection.ranges[0];
-		const insertText = range.empty ? template(defaultContent) : template(view.state.doc.sliceString(range.from, range.to));
-		const indent = view.state.doc.lineAt(range.from).text.match(/^\s*/)?.[0] || '';
+		const insertText = range.empty
+			? template(defaultContent)
+			: template(view.state.doc.sliceString(range.from, range.to));
+		const indent =
+			view.state.doc.lineAt(range.from).text.match(/^\s*/)?.[0] || '';
 		const indentedText = insertText
 			.split('\n')
 			.map((l, i) => (i ? indent + l : l))
@@ -154,7 +179,10 @@
 		if (!view) return;
 
 		if (tab.handle.name.endsWith('html')) {
-			const newDoc = await prettier.format(tab.state.doc, { parser: 'html', plugins: [parserHTML] });
+			const newDoc = await prettier.format(tab.state.doc, {
+				parser: 'html',
+				plugins: [parserHTML]
+			});
 			view.dispatch({
 				changes: {
 					from: 0,
@@ -163,7 +191,10 @@
 				}
 			});
 		} else if (tab.handle.name.endsWith('css')) {
-			const newDoc = await prettier.format(tab.state.doc, { parser: 'css', plugins: [parserCSS] });
+			const newDoc = await prettier.format(tab.state.doc, {
+				parser: 'css',
+				plugins: [parserCSS]
+			});
 			view.dispatch({
 				changes: {
 					from: 0,
@@ -219,7 +250,10 @@
 		showFileInTab(file);
 	}
 
-	async function createFileFromTemplate(template: FS_FileTemplate, entry?: FS_Dir | FS_File) {
+	async function createFileFromTemplate(
+		template: FS_FileTemplate,
+		entry?: FS_Dir | FS_File
+	) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 		const pathToFolder = fs.getPath(entry, false, false);
@@ -233,8 +267,6 @@
 		});
 
 		let fileName = state.value;
-		// let fileName = prompt(`Es wird eine neue Datei im Ordner ${pathToFolder} erzeugt.\nGib den Dateinamen an: _________${template.ext}`);
-
 		if (!fileName) return;
 		if (!fileName.endsWith(template.ext)) fileName += template.ext;
 		if (!isValidFilename(fileName)) return;
@@ -344,6 +376,15 @@
 	}
 
 	onMount(async () => {
+		await navigator.serviceWorker.ready;
+		if (!navigator.serviceWorker.controller) location.reload(); // ensure control
+
+		setInterval(() => {
+			navigator.serviceWorker.controller?.postMessage({
+				type: 'SEND_INFO'
+			});
+		}, 5000);
+
 		document.onkeydown = (e) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
 				e.preventDefault();
@@ -363,122 +404,138 @@
 
 {#snippet showTools(tab: FS_File)}
 	{#if tab.blob.type.endsWith('html')}
-		<div class="flex flex-row flex-wrap gap-1">
-			<!-- INLINE -->
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText((content) => `<a href="">${content}</a>`, 'Link');
-				}}
-				title="Link">
-				<u class="text-blue-700">{'<a>'}</u>
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText((content) => `<b>${content}</b>`, 'fett');
-				}}
-				title="fett">
-				<b>{'<b>'}</b>
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText((content) => `<i>${content}</i>`, 'kursiv');
-				}}
-				title="kursiv">
-				<i>{'<i>'}</i>
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText((content) => `<u>${content}</u>`, 'unterstrichen');
-				}}
-				title="unterstrichen">
-				<u>{'<u>'}</u>
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText((content) => `<button>${content}</button>`, 'Button');
-				}}
-				title="Button">
-				<span class="border rounded-md pl-2 pr-2">{'<button>'}</span>
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText((content) => `<link href="${content}" rel="stylesheet">`, 'style.css');
-				}}
-				title="Style-Link">
-				{'<link "stylesheet">'}
-			</button>
-		</div>
-		<!-- BLOCKS -->
-		<div class="flex flex-row flex-wrap gap-1">
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText(
-						(content) => `
+		<div class="flex flex-row gap-2 flex-wrap">
+			<div class="flex flex-row flex-wrap gap-1">
+				<!-- INLINE -->
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText((content) => `<a href="">${content}</a>`, 'Link');
+					}}
+					title="Link">
+					<u class="text-blue-700">{'<a>'}</u>
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText((content) => `<b>${content}</b>`, 'fett');
+					}}
+					title="fett">
+					<b>{'<b>'}</b>
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText((content) => `<i>${content}</i>`, 'kursiv');
+					}}
+					title="kursiv">
+					<i>{'<i>'}</i>
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText((content) => `<u>${content}</u>`, 'unterstrichen');
+					}}
+					title="unterstrichen">
+					<u>{'<u>'}</u>
+				</button>
+				<button
+					class="button medium flex flex-row flex-nowrap items-center gap-1"
+					onclick={() => {
+						insertText(
+							(content) => `<img width="100" src="${content}.jpg">`,
+							'bild'
+						);
+					}}
+					title="Bild">
+					<img class="w-5" alt="img" src={imgIcon} />{'<img>'}
+				</button>
+				<button
+					class="button medium flex flex-row items-center gap-1"
+					onclick={() => {
+						insertText((content) => `<button>${content}</button>`, 'Button');
+					}}
+					title="Button">
+					<img alt="table" class="w-5" src={pointerIcon} /><span
+						>{'<button>'}</span>
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText(
+							(content) => `<link href="${content}" rel="stylesheet">`,
+							'style.css'
+						);
+					}}
+					title="Style-Link">
+					{'<link "stylesheet">'}
+				</button>
+			</div>
+			<!-- BLOCKS -->
+			<div class="flex flex-row flex-wrap gap-1">
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText(
+							(content) => `
 <div>
 ${content}
 </div>`,
-						'Neue Einteilung'
-					);
-				}}
-				title="Einteilung">
-				{'<div>'}
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText(
-						(content) => `
+							'Neue Einteilung'
+						);
+					}}
+					title="Einteilung">
+					{'<div>'}
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText(
+							(content) => `
 <p>
 ${content}
 </p>`,
-						'Neuer Paragraph'
-					);
-				}}
-				title="Paragraph">
-				{'<p>'}
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText(
-						(content) => `
+							'Neuer Paragraph'
+						);
+					}}
+					title="Paragraph">
+					{'<p>'}
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText(
+							(content) => `
 <ul>
   <li>${content}</li>
   <li>...</li>
 </ul>`,
-						'Erstes Listenelement'
-					);
-				}}
-				title="Ungeordnete Liste">
-				{'● <ul>'}
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText(
-						(content) => `
+							'Erstes Listenelement'
+						);
+					}}
+					title="Ungeordnete Liste">
+					{'● <ul>'}
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText(
+							(content) => `
 <ol>
   <li>${content}</li>
   <li>...</li>
 </ol>`,
-						'Erstes Listenelement'
-					);
-				}}
-				title="Geordnete Liste">
-				{'1. <ol>'}
-			</button>
-			<button
-				class="button medium"
-				onclick={() => {
-					insertText(
-						(content) => `
+							'Erstes Listenelement'
+						);
+					}}
+					title="Geordnete Liste">
+					{'1. <ol>'}
+				</button>
+				<button
+					class="button medium flex flex-row items-center gap-1"
+					onclick={() => {
+						insertText(
+							(content) => `
 <table border="1" width="100%">
   <tr>
     <th>${content}</th>
@@ -487,12 +544,32 @@ ${content}
     <td>${content}</td>
   </tr>
 </table>`,
-						'Inhalt'
-					);
-				}}
-				title="Tabelle">
-				{'<table>'}
-			</button>
+							'Inhalt'
+						);
+					}}
+					title="Tabelle">
+					<img alt="table" class="w-5" src={tableIcon} />{'<table>'}
+				</button>
+				<button
+					class="button medium"
+					onclick={() => {
+						insertText(
+							(content) => `
+<details>
+  <summary>
+    Zusammenfassung
+  </summary>
+  <p>
+    ${content}
+  </p>
+</details>`,
+							'Inhalt'
+						);
+					}}
+					title="Details">
+					{'<details>'}
+				</button>
+			</div>
 		</div>
 	{/if}
 {/snippet}
@@ -549,8 +626,16 @@ ${content}
 				{root.handle.name || 'Online-Ordner'}
 			</button>
 			{#if selectedFile === root && root.parent}
-				<button class="button" title="Datei umbenennen" onclick={() => renameFolder(root)}><img class="h-4" src={renameIcon} /></button>
-				<button class="button" title="Lösche Ordner" onclick={() => deleteEntryInEditor(root)}><img class="h-4" src={trashIcon} /></button>
+				<button
+					class="button"
+					title="Datei umbenennen"
+					onclick={() => renameFolder(root)}
+					><img alt="rename" class="h-4" src={renameIcon} /></button>
+				<button
+					class="button"
+					title="Lösche Ordner"
+					onclick={() => deleteEntryInEditor(root)}
+					><img alt="trash" class="h-4" src={trashIcon} /></button>
 			{/if}
 		</div>
 
@@ -577,13 +662,24 @@ ${content}
 					}}>
 					<FileIcon {file}></FileIcon>
 					{#if file === previewFile}
-						<img class="w-5" src={eyeIcon} />
+						<img alt="eye" class="w-5" src={eyeIcon} />
 					{/if}
-					<span class="grow">{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>
+					<span class="grow"
+						>{file.handle.name}{file.state?.doc === file.state?.cachedDoc
+							? ''
+							: '*'}</span>
 				</button>
 				{#if selectedFile && fs.equalEntry(selectedFile, file)}
-					<button class="button" title="Datei umbenennen" onclick={() => renameFile(file)}><img class="h-4" src={renameIcon} /></button>
-					<button class="button" title="Lösche Datei" onclick={() => deleteEntryInEditor(file)}><img class="h-4" src={trashIcon} /></button>
+					<button
+						class="button"
+						title="Datei umbenennen"
+						onclick={() => renameFile(file)}
+						><img alt="rename" class="h-4" src={renameIcon} /></button>
+					<button
+						class="button"
+						title="Lösche Datei"
+						onclick={() => deleteEntryInEditor(file)}
+						><img alt="rename" class="h-4" src={trashIcon} /></button>
 				{/if}
 			</div>
 		{/each}
@@ -601,28 +697,44 @@ ${content}
 <div class="hui">
 	<Splitpanes style="height: 100dvh;">
 		<Pane size={20}>
-			<div class="h-full bg-linear-to-b from-blue-300 to-blue-200 flex flex-col gap-2 p-2">
+			<div
+				class="h-full bg-linear-to-b from-blue-300 to-blue-200 flex flex-col gap-2 p-2">
 				<div class="flex flex-col gap-2 p-2 min-h-0 h-min w-full">
 					{#if fs.root && fs.root.handle.name === ''}
-						<button class="button w-full items-center flex flex-row gap-2 flex-nowrap overflow-hidden min-w-0" onclick={loadFolder}
-							><img class="h-5" src={laptopIcon} /> Lade Ordner von PC</button>
+						<button
+							class="button w-full items-center flex flex-row gap-2 flex-nowrap overflow-hidden min-w-0"
+							onclick={loadFolder}
+							><img alt="pc" class="h-5" src={laptopIcon} /> Lade Ordner von PC</button>
 					{:else}
-						<button class="button w-full items-center flex flex-row gap-2 flex-nowrap overflow-hidden min-w-0" onclick={loadOPFS}
-							><img class="h-5" src={globeIcon} /> Lade Online-Ordner</button>
+						<button
+							class="button w-full items-center flex flex-row gap-2 flex-nowrap overflow-hidden min-w-0"
+							onclick={loadOPFS}
+							><img alt="globe" class="h-5" src={globeIcon} /> Lade Online-Ordner</button>
 					{/if}
 					<div class="border-t-2 border-white"></div>
 					{#if fs.root}
 						<div class="flex flex-row gap-2">
-							<button title="Ordner neu laden" class="button" onclick={() => reloadFolder()}><img class="h-3" src={refreshIcon} /></button>
+							<button
+								title="Ordner neu laden"
+								class="button"
+								onclick={() => reloadFolder()}
+								><img alt="refresh" class="h-3" src={refreshIcon} /></button>
 							<button
 								title="Neues HTML-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selectedFile)}><FileIcon ext=".html"></FileIcon></button>
+								onclick={() =>
+									createFileFromTemplate(HTML_TEMPLATE, selectedFile)}
+								><FileIcon ext=".html"></FileIcon></button>
 							<button
 								title="Neues CSS-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selectedFile)}><FileIcon ext=".css"></FileIcon></button>
-							<button title="Neuen Ordner erstellen" class="button inline-flex items-center" onclick={() => createFolder(selectedFile)}
+								onclick={() =>
+									createFileFromTemplate(CSS_TEMPLATE, selectedFile)}
+								><FileIcon ext=".css"></FileIcon></button>
+							<button
+								title="Neuen Ordner erstellen"
+								class="button inline-flex items-center"
+								onclick={() => createFolder(selectedFile)}
 								><FileIcon ext="dir"></FileIcon></button>
 						</div>
 						{@render showFolder(fs.root)}
@@ -634,69 +746,119 @@ ${content}
 			</div>
 		</Pane>
 		<Pane>
-			<div class="flex flex-col gap-2 p-2 h-full min-h-0 max-h-full">
-				{#if tab}
-					<div class="flex flex-row items-center gap-2">
-						<div class="grow">
-							<div class="font-bold">{fs.getPath(tab)}</div>
-							{#if tab?.state?.doc !== tab?.state?.cachedDoc}
-								<button title="Änderungen rückgängig machen!" onclick={() => revertTab(tab)}
-									><u class="cursor-not-allowed">nicht gespeichert</u></button>
-							{:else}
-								<span>aktuell</span>
-							{/if}
-						</div>
-						{#if tab.state}
-							<button title="Rückgängig!" class="button" onclick={undoEdit}><img class="h-6" src={undoIcon} /></button>
-							<button title="Speichern!" class="button" onclick={() => saveTab()}><img class="h-6" src={saveIcon} /></button>
-							<button title="Formatieren!" class="button whitespace-nowrap" onclick={async () => await autoformat()}
-								><img alt="format" class="h-6" src={wandIcon} /></button>
-						{/if}
-					</div>
-					<div class="flex flex-col flex-wrap"></div>
-					{#if tab.state}
-						{@render showTools(tab)}
-						<CodeMirror lineWrapping={true} onready={(e) => (view = e)} bind:value={tab.state.doc} lang={pickLanguage(tab)}></CodeMirror>
-					{:else}
-						<div class="label negative">Datei kann nicht editiert werden.</div>
-					{/if}
-				{:else}
-					<div class="label negative">Keine Datei geöffnet</div>
-				{/if}
-			</div>
-		</Pane>
-		<Pane>
 			<Splitpanes horizontal>
-				<Pane>
-					<div class="h-full w-full p-2 flex flex-col gap-2">
+				<Pane size={70}>
+					<div class="flex flex-col gap-2 p-2 h-full min-h-0 max-h-full">
 						{#if tab}
-							{@const src = resolve((PREVIEW_PREFIX + fs.getRelativeURL(tab)) as '/')}
-							{#if tab.blob.type.startsWith('image/')}
-								<div class="w-full h-full flex flex-col gap-2">
-									<button class="button stretch negative text-center flex flex-row items-center">
-										<div class="grow">{src}</div>
-									</button>
-									<div class="overflow-hidden rounded-large standard-shadow border-2 border-red-300 grow bg-white">
-										<img class="max-h-full max-w-full" alt="img" {src} />
-									</div>
+							<div class="flex flex-row items-center gap-2">
+								<div class="grow">
+									<div class="font-bold">{fs.getPath(tab)}</div>
+									{#if tab?.state?.doc !== tab?.state?.cachedDoc}
+										<button
+											title="Änderungen rückgängig machen!"
+											onclick={() => revertTab(tab)}
+											><u class="cursor-not-allowed">nicht gespeichert</u
+											></button>
+									{:else}
+										<span>aktuell</span>
+									{/if}
 								</div>
+								{#if tab.state}
+									<button title="Rückgängig!" class="button" onclick={undoEdit}
+										><img alt="undo" class="h-6" src={undoIcon} /></button>
+									<button
+										title="Speichern!"
+										class="button"
+										onclick={() => saveTab()}
+										><img alt="save" class="h-6" src={saveIcon} /></button>
+									<button
+										title="Formatieren!"
+										class="button whitespace-nowrap"
+										onclick={async () => await autoformat()}
+										><img alt="format" class="h-6" src={wandIcon} /></button>
+								{/if}
+							</div>
+							<div class="flex flex-col flex-wrap"></div>
+							{#if tab.state}
+								{@render showTools(tab)}
+								<CodeMirror
+									lineWrapping={true}
+									onready={(e) => (view = e)}
+									bind:value={tab.state.doc}
+									lang={pickLanguage(tab)}></CodeMirror>
 							{:else}
-								<LiveView bind:this={liveView} {fs} editFile={tab} gotoFile={gotoFileInTab}></LiveView>
+								<div class="label negative">
+									Datei kann nicht editiert werden.
+								</div>
 							{/if}
-						{/if}
-						{#if previewFile}
-							<FauxBrowser bind:this={fauxBrowser} {fs} {previewFile}></FauxBrowser>
+						{:else}
+							<div class="label negative">Keine Datei geöffnet</div>
 						{/if}
 					</div>
 				</Pane>
 				<Pane>
 					{#if fs.root}
-						<div class="h-full w-full flex flex-col items-center justify-center">
-							<HuiDagre settings={{ marginx: 10, marginy: 10 }} graphDef={fs.getRefGraph(gotoFileInTab)}></HuiDagre>
+						<div
+							class="h-full w-full flex flex-col items-center justify-center">
+							<HuiElk
+								settings={{
+									defaultLayoutOptions: {
+										'elk.direction': 'DOWN',
+										'elk.spacing.edgeNode': '10',
+										'elk.spacing.edgeNodeBetweenLayers': '40',
+										'elk.layered.compaction.postCompaction.strategy':
+											'LEFT_RIGHT',
+										'elk.layered.unnecessaryBendRemoval': 'true'
+									}
+								}}
+								graphDef={fs.getRefGraph(gotoFileInTab)}>
+							</HuiElk>
 						</div>
 					{/if}
 				</Pane>
 			</Splitpanes>
+		</Pane>
+		<Pane>
+			<div class="h-full w-full p-2 flex flex-col gap-2">
+				{#if tab}
+					{@const src = fs.getRelativeURL(tab)}
+					{#if tab.blob.type.startsWith('image/')}
+						<div class="w-full h-full flex flex-col gap-2">
+							<button
+								class="button stretch negative text-center flex flex-row items-center">
+								<div class="grow">{src}</div>
+							</button>
+							<div
+								class="overflow-hidden rounded-large standard-shadow border-2 border-red-300 grow bg-white">
+								<img
+									class="max-h-full max-w-full"
+									alt="img"
+									src={resolveToPreview(src)} />
+							</div>
+						</div>
+					{:else if tab.handle.name.endsWith('.css')}
+						<div class="w-full h-fit flex flex-col gap-2">
+							<button
+								class="button stretch negative text-center flex flex-row items-center">
+								<div class="grow">{src}</div>
+							</button>
+						</div>
+					{:else}
+						<LiveView
+							bind:this={liveView}
+							{fs}
+							editFile={tab}
+							gotoFile={gotoFileInTab}></LiveView>
+					{/if}
+				{/if}
+				{#if previewFile}
+					<FauxBrowser
+						bind:this={fauxBrowser}
+						{fs}
+						{previewFile}
+						onClose={() => (previewFile = undefined)}></FauxBrowser>
+				{/if}
+			</div>
 		</Pane>
 	</Splitpanes>
 

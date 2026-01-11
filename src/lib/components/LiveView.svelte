@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
-	import type { FS, FS_File } from '$lib/fast-fs.svelte';
+	import { resolveToPreview, type FS, type FS_File } from '$lib/fast-fs.svelte';
 	import { refreshIcon } from '$lib/icons';
-	import { PREVIEW_PREFIX } from '$lib/routing-info';
 	import { onMount } from 'svelte';
 
 	let {
@@ -17,22 +15,34 @@
 
 	let frame: HTMLIFrameElement | undefined = $state();
 
-	let editBase = $derived(resolve((PREVIEW_PREFIX + fs.getRelativeURL(editFile, true, true)) as '/'));
-	let live = $derived(editFile.handle.name.endsWith('.html')); // we only allow live preview for html
-	let editSrcdoc = $derived(live && editFile ? editFile.state?.doc.replace('<head>', `<head><base href="${editBase}">`) : undefined);
-	let editSrc = $derived(resolve((PREVIEW_PREFIX + fs.getRelativeURL(editFile)) as '/'));
+	let fileURLBase = $derived(
+		resolveToPreview(fs.getRelativeURL(editFile, true, true))
+	);
+	let isLive = $derived(editFile.handle.name.endsWith('.html')); // we only allow live preview for html
+	let fileSrcDoc = $derived(
+		isLive && editFile
+			? editFile.state?.doc.replace(
+					'<head>',
+					`<head><base href="${fileURLBase}">`
+				)
+			: undefined
+	);
+	let relFileSrc = $derived(fs.getRelativeURL(editFile));
+	let fileSrc = $derived(resolveToPreview(relFileSrc));
 
-	let editDoc: HTMLDocument | undefined = $state();
-	let title = $derived(live && editDoc && editDoc.title ? editDoc.title : editSrc);
+	let fileDoc: HTMLDocument | undefined = $state();
+	let title = $derived(
+		isLive && fileDoc && fileDoc.title ? fileDoc.title : fileSrc
+	);
 
 	export function reload() {
 		frame?.contentWindow?.location.reload();
 	}
 
 	onMount(() => {
-    if (!frame) return;
+		if (!frame) return;
 		frame.onload = () => {
-      if (!frame) return;
+			if (!frame) return;
 			if (!frame.contentDocument) return;
 			const doc = frame.contentDocument;
 
@@ -43,24 +53,26 @@
 				};
 			}
 
-			editDoc = doc;
+			fileDoc = doc;
 		};
 	});
 </script>
 
 <div class="w-full h-full flex flex-col gap-2">
-	<button class="button stretch negative flex flex-row items-center" onclick={reload}>
+	<button
+		class="button stretch negative flex flex-row items-center"
+		onclick={reload}>
 		<div class="font-bold">LIVE</div>
 		<div class="grow">{title}</div>
 		<img class="w-5" alt="refresh" src={refreshIcon} />
 	</button>
 
-	{#if editSrcdoc}
+	{#if fileSrcDoc}
 		<iframe
 			title="Live-Ansicht"
 			class="rounded-large standard-shadow border-2 border-red-300 grow bg-white"
 			loading="eager"
 			bind:this={frame}
-			srcdoc={editSrcdoc}></iframe>
+			srcdoc={fileSrcDoc}></iframe>
 	{/if}
 </div>

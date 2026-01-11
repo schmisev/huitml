@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { AnyIcon, CSSIcon, FolderIcon, HTMLIcon, JPGIcon, MP3Icon, PNGIcon, RootIcon } from '$lib/icons';
+	import {
+		AnyIcon,
+		CSSIcon,
+		FolderIcon,
+		HTMLIcon,
+		JPGIcon,
+		MP3Icon,
+		PNGIcon,
+		RootIcon
+	} from '$lib/icons';
 	import type { FS_Entry, FS_File } from '$lib/fast-fs.svelte';
 
 	let {
@@ -19,14 +28,14 @@
 				return RootIcon;
 			}
 		} else {
-      if (useName === "dir") return FolderIcon;
+			if (useName === 'dir') return FolderIcon;
 			if (useName.endsWith('.html')) return HTMLIcon;
 			else if (useName.endsWith('.css')) return CSSIcon;
-		  else if (useName.endsWith('.jpg')) return JPGIcon;
-      else if (useName.endsWith('.webp')) return JPGIcon;
+			else if (useName.endsWith('.jpg')) return JPGIcon;
+			else if (useName.endsWith('.webp')) return JPGIcon;
 			else if (useName.endsWith('.png')) return PNGIcon;
 			else if (useName.endsWith('.mp3')) return MP3Icon;
-      else return AnyIcon;
+			else return AnyIcon;
 		}
 	});
 </script>

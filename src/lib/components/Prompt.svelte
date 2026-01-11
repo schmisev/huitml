@@ -8,14 +8,14 @@
 	};
 
 	type PromptSettings = {
-    titleClass?: string;
+		titleClass?: string;
 		icon?: string;
 		title?: string;
 		body?: string;
 		inputLabel?: string;
 		inputExt?: string;
 		confirmLabel?: string;
-    cancelLabel?: string;
+		cancelLabel?: string;
 		valuePreset?: string;
 		onlyConfirm?: boolean;
 		onConfirm?: (state: PromptState) => any;
@@ -59,9 +59,10 @@
 
 <Modal bind:this={modal} onClose={cancel}>
 	<div class="flex flex-col gap-2">
-		<div class="label {config.titleClass} flex flex-row gap-2 items-center justify-center">
+		<div
+			class="label {config.titleClass} flex flex-row gap-2 items-center justify-center">
 			{#if config.icon}
-				<img class="h-5" src={config.icon} />
+				<img alt="icon" class="h-5" src={config.icon} />
 			{/if}
 			<div>{config.title || 'Eingabeaufforderung'}</div>
 		</div>
@@ -69,16 +70,23 @@
 		<div class="flex flex-col gap-1">
 			<div>{@html config.body || ''}</div>
 			{#if !config.onlyConfirm}
-				<div class="container flex flex-row gap-2 flex-wrap items-center justify-items-center">
+				<div
+					class="container flex flex-row gap-2 flex-wrap items-center justify-items-center">
 					<b>{config.inputLabel || ''}</b>
-					<input class="input grow" type="text" bind:value={info.value} onchange={confirm} />
+					<input
+						class="input grow"
+						type="text"
+						bind:value={info.value}
+						onchange={confirm} />
 					<span>{config.inputExt || ''}</span>
 				</div>
 			{/if}
 		</div>
 		<div class="grid grid-cols-2 gap-2">
-			<button class="button stretch positive" onclick={confirm}>{config.confirmLabel || "OK"}</button>
-			<button class="button stretch negative" onclick={cancel}>{config.cancelLabel || "Abbrechen"}</button>
+			<button class="button stretch positive" onclick={confirm}
+				>{config.confirmLabel || 'OK'}</button>
+			<button class="button stretch negative" onclick={cancel}
+				>{config.cancelLabel || 'Abbrechen'}</button>
 		</div>
 	</div>
 </Modal>
