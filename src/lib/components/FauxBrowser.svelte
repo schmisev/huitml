@@ -49,10 +49,10 @@
 		</button>
 
     <button
-			class="button stretch neutral flex flex-row items-center gap-2"
+			class="button stretch neutral inline-flex flex-row items-center gap-2 overflow-hidden"
 			onclick={reload}>
 			<img class="w-5" alt="peek" src={eyeIcon} />
-			<div class="grow">{title}</div>
+			<span class="grow text-nowrap">{title}</span>
 			<img class="w-5" alt="refresh" src={refreshIcon} />
 		</button>
 		

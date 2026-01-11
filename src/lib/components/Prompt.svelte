@@ -35,7 +35,6 @@
 		info = {};
 		config = settings;
 		info.value = config.valuePreset || '';
-
 		modal.open();
 		const promise = new Promise<PromptState>((resolve, reject) => {
 			resolvePromise = resolve;

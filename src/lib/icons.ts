@@ -27,6 +27,8 @@ import AnyIcon from '$lib/assets/ui-icons/files-interface-svgrepo-com (1).svg';
 import FolderIcon from '$lib/assets/file-icons/folder.svg';
 import RootIcon from '$lib/assets/file-icons/folder-2.svg';
 
+import favicon from '$lib/assets/favicon.svg';
+
 export {
 	globeIcon,
 	renameIcon,
@@ -55,5 +57,7 @@ export {
 	ZIPIcon,
 	AnyIcon,
 	FolderIcon,
-	RootIcon
+	RootIcon,
+  
+  favicon
 };

@@ -20,6 +20,7 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  console.log(event);
 	const url = new URL(event.request.url);
   
 	if (!url.pathname.startsWith('/preview/') && !url.pathname.startsWith('/huitml/preview/')) {
