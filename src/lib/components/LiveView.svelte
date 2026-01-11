@@ -60,7 +60,7 @@
 
 <div class="w-full h-full flex flex-col gap-2">
 	<button
-		class="button stretch negative inline-flex flex-row items-center overflow-hidden gap-2"
+		class="shrink-0 button stretch negative inline-flex flex-row items-center overflow-hidden gap-2"
 		onclick={reload}>
 		<div class="font-bold">LIVE</div>
 		<div class="grow text-nowrap">{title}</div>

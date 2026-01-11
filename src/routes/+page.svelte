@@ -11,7 +11,14 @@
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
-	import { FS, type FS_FileTemplate, type FS_Dir, type FS_Entry, type FS_File, resolveToPreview } from '$lib/fast-fs.svelte';
+	import {
+		FS,
+		type FS_FileTemplate,
+		type FS_Dir,
+		type FS_Entry,
+		type FS_File,
+		resolveToPreview
+	} from '$lib/fast-fs.svelte';
 	import FileIcon from '$lib/components/FileIcon.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
 	import {
@@ -32,6 +39,8 @@
 	import LiveView from '$lib/components/LiveView.svelte';
 	import FauxBrowser from '$lib/components/FauxBrowser.svelte';
 	import HuiElk from '$lib/hui-graphs/HuiElk.svelte';
+	import CSSView from '$lib/components/CSSView.svelte';
+	import { doc } from 'prettier';
 
 	// setup
 	let view: EditorView | undefined = $state();
@@ -136,11 +145,17 @@
 		if (tab.blob.type.endsWith('javascript')) return javascript();
 	}
 
-	async function insertText(template: (content: string) => string, defaultContent: string) {
+	async function insertText(
+		template: (content: string) => string,
+		defaultContent: string
+	) {
 		if (!view) return;
 		const range = view.state.selection.ranges[0];
-		const insertText = range.empty ? template(defaultContent) : template(view.state.doc.sliceString(range.from, range.to));
-		const indent = view.state.doc.lineAt(range.from).text.match(/^\s*/)?.[0] || '';
+		const insertText = range.empty
+			? template(defaultContent)
+			: template(view.state.doc.sliceString(range.from, range.to));
+		const indent =
+			view.state.doc.lineAt(range.from).text.match(/^\s*/)?.[0] || '';
 		const indentedText = insertText
 			.split('\n')
 			.map((l, i) => (i ? indent + l : l))
@@ -238,7 +253,10 @@
 		showFileInTab(file);
 	}
 
-	async function createFileFromTemplate(template: FS_FileTemplate, entry?: FS_Dir | FS_File) {
+	async function createFileFromTemplate(
+		template: FS_FileTemplate,
+		entry?: FS_Dir | FS_File
+	) {
 		if (!entry) return;
 		if (entry.kind === 'file') entry = entry.parent;
 		const pathToFolder = fs.getPath(entry, false, false);
@@ -427,7 +445,10 @@
 				<button
 					class="button medium flex flex-row flex-nowrap items-center gap-1"
 					onclick={() => {
-						insertText((content) => `<img width="100" src="${content}.jpg">`, 'bild');
+						insertText(
+							(content) => `<img width="100" src="${content}.jpg">`,
+							'bild'
+						);
 					}}
 					title="Bild">
 					<img class="w-5" alt="img" src={imgIcon} />{'<img>'}
@@ -438,12 +459,16 @@
 						insertText((content) => `<button>${content}</button>`, 'Button');
 					}}
 					title="Button">
-					<img alt="table" class="w-5" src={pointerIcon} /><span>{'<button>'}</span>
+					<img alt="table" class="w-5" src={pointerIcon} /><span
+						>{'<button>'}</span>
 				</button>
 				<button
 					class="button medium"
 					onclick={() => {
-						insertText((content) => `<link href="${content}" rel="stylesheet">`, 'style.css');
+						insertText(
+							(content) => `<link href="${content}" rel="stylesheet">`,
+							'style.css'
+						);
 					}}
 					title="Style-Link">
 					{'<link "stylesheet">'}
@@ -604,8 +629,15 @@ ${content}
 				{root.handle.name || 'Online-Ordner'}
 			</button>
 			{#if selectedFile === root && root.parent}
-				<button class="button" title="Datei umbenennen" onclick={() => renameFolder(root)}><img alt="rename" class="h-4" src={renameIcon} /></button>
-				<button class="button" title="Lösche Ordner" onclick={() => deleteEntryInEditor(root)}
+				<button
+					class="button"
+					title="Datei umbenennen"
+					onclick={() => renameFolder(root)}
+					><img alt="rename" class="h-4" src={renameIcon} /></button>
+				<button
+					class="button"
+					title="Lösche Ordner"
+					onclick={() => deleteEntryInEditor(root)}
 					><img alt="trash" class="h-4" src={trashIcon} /></button>
 			{/if}
 		</div>
@@ -635,11 +667,21 @@ ${content}
 					{#if file === previewFile}
 						<img alt="eye" class="w-5" src={eyeIcon} />
 					{/if}
-					<span class="grow">{file.handle.name}{file.state?.doc === file.state?.cachedDoc ? '' : '*'}</span>
+					<span class="grow"
+						>{file.handle.name}{file.state?.doc === file.state?.cachedDoc
+							? ''
+							: '*'}</span>
 				</button>
 				{#if selectedFile && fs.equalEntry(selectedFile, file)}
-					<button class="button" title="Datei umbenennen" onclick={() => renameFile(file)}><img alt="rename" class="h-4" src={renameIcon} /></button>
-					<button class="button" title="Lösche Datei" onclick={() => deleteEntryInEditor(file)}
+					<button
+						class="button"
+						title="Datei umbenennen"
+						onclick={() => renameFile(file)}
+						><img alt="rename" class="h-4" src={renameIcon} /></button>
+					<button
+						class="button"
+						title="Lösche Datei"
+						onclick={() => deleteEntryInEditor(file)}
 						><img alt="rename" class="h-4" src={trashIcon} /></button>
 				{/if}
 			</div>
@@ -658,29 +700,50 @@ ${content}
 <div class="hui">
 	<Splitpanes style="height: 100dvh;">
 		<Pane size={20}>
-			<div class="h-full bg-linear-to-b from-blue-300 to-blue-200 flex flex-col">
+			<div
+				class="h-full bg-linear-to-b from-blue-300 to-blue-200 flex flex-col">
 				<div class="h-min min-h-0 w-full flex flex-col gap-2 p-2 shrink-0">
-					<div class="flex flex-row gap-2 text-center text-md flex-nowrap overflow-clip"><b class="text-nowrap">huitml</b><img alt="favicon" class="w-5" src={favicon}><span class="text-white text-nowrap">by sms</span></div>
+					<div
+						class="flex flex-row gap-2 text-center text-md flex-nowrap overflow-clip">
+						<b class="text-nowrap">huitml</b><img
+							alt="favicon"
+							class="w-5"
+							src={favicon} /><span class="text-white text-nowrap">by sms</span>
+					</div>
 					{#if fs.root && fs.root.handle.name === ''}
-						<button class="button stretch shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0" onclick={loadFolder}
+						<button
+							class="button stretch shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0"
+							onclick={loadFolder}
 							><img alt="pc" class="h-5" src={laptopIcon} /> Lade Ordner von PC</button>
 					{:else}
-						<button class="button stretch shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0" onclick={loadOPFS}
+						<button
+							class="button stretch shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0"
+							onclick={loadOPFS}
 							><img alt="globe" class="h-5" src={globeIcon} /> Lade Online-Ordner</button>
 					{/if}
 					{#if fs.root}
 						<div class="flex flex-row gap-2 justify-center">
-							<button title="Ordner neu laden" class="button" onclick={() => reloadFolder()}
+							<button
+								title="Ordner neu laden"
+								class="button"
+								onclick={() => reloadFolder()}
 								><img alt="refresh" class="h-5" src={refreshIcon} /></button>
 							<button
 								title="Neues HTML-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(HTML_TEMPLATE, selectedFile)}><FileIcon ext=".html"></FileIcon></button>
+								onclick={() =>
+									createFileFromTemplate(HTML_TEMPLATE, selectedFile)}
+								><FileIcon ext=".html"></FileIcon></button>
 							<button
 								title="Neues CSS-File erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFileFromTemplate(CSS_TEMPLATE, selectedFile)}><FileIcon ext=".css"></FileIcon></button>
-							<button title="Neuen Ordner erstellen" class="button inline-flex items-center" onclick={() => createFolder(selectedFile)}
+								onclick={() =>
+									createFileFromTemplate(CSS_TEMPLATE, selectedFile)}
+								><FileIcon ext=".css"></FileIcon></button>
+							<button
+								title="Neuen Ordner erstellen"
+								class="button inline-flex items-center"
+								onclick={() => createFolder(selectedFile)}
 								><FileIcon ext="dir"></FileIcon></button>
 						</div>
 					{:else}
@@ -689,7 +752,8 @@ ${content}
 					{/if}
 				</div>
 				{#if fs.root}
-					<div class="border-t-2 border-white grow min-h-0 overflow-auto scrollbar-thin p-2">
+					<div
+						class="border-t-2 border-white grow min-h-0 overflow-auto scrollbar-thin p-2">
 						{@render showFolder(fs.root)}
 					</div>
 				{/if}
@@ -702,20 +766,35 @@ ${content}
 						{#if tab}
 							<div class="flex flex-row items-center gap-2">
 								<div class="min-w-0">
-									<div class="font-bold min-w-0 text-nowrap">{fs.getPath(tab)}</div>
+									<div class="font-bold min-w-0 text-nowrap">
+										{fs.getPath(tab)}
+									</div>
 									{#if tab?.state?.doc !== tab?.state?.cachedDoc}
-										<button title="Änderungen rückgängig machen!" onclick={() => revertTab(tab)}
-											><u class="cursor-not-allowed">nicht gespeichert</u></button>
+										<button
+											title="Änderungen rückgängig machen!"
+											onclick={() => revertTab(tab)}
+											><u class="cursor-not-allowed">nicht gespeichert</u
+											></button>
 									{:else}
 										<span>aktuell</span>
 									{/if}
 								</div>
 								{#if tab.state}
 									<div class="grow flex flex-row gap-2 justify-end">
-										<button title="Rückgängig!" class="button shrink-0" onclick={undoEdit}><img alt="undo" class="h-6" src={undoIcon} /></button>
-										<button title="Speichern!" class="button shrink-0" onclick={() => saveTab()}
+										<button
+											title="Rückgängig!"
+											class="button shrink-0"
+											onclick={undoEdit}
+											><img alt="undo" class="h-6" src={undoIcon} /></button>
+										<button
+											title="Speichern!"
+											class="button shrink-0"
+											onclick={() => saveTab()}
 											><img alt="save" class="h-6" src={saveIcon} /></button>
-										<button title="Formatieren!" class="button shrink-0" onclick={async () => await autoformat()}
+										<button
+											title="Formatieren!"
+											class="button shrink-0"
+											onclick={async () => await autoformat()}
 											><img alt="format" class="h-6" src={wandIcon} /></button>
 									</div>
 								{/if}
@@ -723,25 +802,36 @@ ${content}
 							<div class="flex flex-col flex-wrap"></div>
 							{#if tab.state}
 								{@render showTools(tab)}
-								<CodeMirror lineWrapping={true} onready={(e) => (view = e)} bind:value={tab.state.doc} lang={pickLanguage(tab)}></CodeMirror>
+								<CodeMirror
+									lineWrapping={true}
+									onready={(e) => (view = e)}
+									bind:value={tab.state.doc}
+									lang={pickLanguage(tab)}></CodeMirror>
 							{:else}
-								<div class="label negative overflow-clip text-ellipsis">Datei kann nicht editiert werden.</div>
+								<div class="label negative overflow-clip text-ellipsis">
+									Datei kann nicht editiert werden.
+								</div>
 							{/if}
 						{:else}
-							<div class="label negative overflow-clip text-nowrap text-ellipsis">Keine Datei geöffnet</div>
+							<div
+								class="label negative overflow-clip text-nowrap text-ellipsis">
+								Keine Datei geöffnet
+							</div>
 						{/if}
 					</div>
 				</Pane>
 				<Pane>
 					{#if fs.root}
-						<div class="h-full w-full flex flex-col items-center justify-center">
+						<div
+							class="h-full w-full flex flex-col items-center justify-center">
 							<HuiElk
 								settings={{
 									defaultLayoutOptions: {
 										'elk.direction': 'DOWN',
 										'elk.spacing.edgeNode': '10',
 										'elk.spacing.edgeNodeBetweenLayers': '40',
-										'elk.layered.compaction.postCompaction.strategy': 'LEFT_RIGHT',
+										'elk.layered.compaction.postCompaction.strategy':
+											'LEFT_RIGHT',
 										'elk.layered.unnecessaryBendRemoval': 'true'
 									}
 								}}
@@ -759,29 +849,37 @@ ${content}
 						{@const src = fs.getRelativeURL(tab)}
 						{#if tab.blob.type.startsWith('image/')}
 							<div class="w-full h-full flex flex-col gap-2">
-								<button class="button stretch negative text-center flex flex-row items-center">
+								<button
+									class="button stretch negative text-center flex flex-row items-center">
 									<div class="grow">{src}</div>
 								</button>
-								<div class="overflow-hidden rounded-large standard-shadow border-2 border-red-300 grow bg-white">
-									<img class="max-h-full max-w-full" alt="img" src={resolveToPreview(src)} />
+								<div
+									class="overflow-hidden rounded-large standard-shadow border-2 border-red-300 grow bg-white">
+									<img
+										class="max-h-full max-w-full"
+										alt="img"
+										src={resolveToPreview(src)} />
 								</div>
 							</div>
 						{:else if tab.handle.name.endsWith('.css')}
-							<div class="w-full h-fit flex flex-col gap-2">
-								<button class="button stretch negative text-center flex flex-row items-center">
-									<div class="grow">{src}</div>
-								</button>
-								<div class="overflow-hidden rounded-large standard-shadow border-2 border-red-300 grow bg-white">Keine Vorschau möglich.</div>
-							</div>
+							<CSSView {src} doc={tab.state?.doc || ''}></CSSView>
 						{:else}
-							<LiveView bind:this={liveView} {fs} editFile={tab} gotoFile={gotoFileInTab}></LiveView>
+							<LiveView
+								bind:this={liveView}
+								{fs}
+								editFile={tab}
+								gotoFile={gotoFileInTab}></LiveView>
 						{/if}
 					{/if}
 				</Pane>
 
 				{#if previewFile}
 					<Pane class="p-2">
-						<FauxBrowser bind:this={fauxBrowser} {fs} {previewFile} onClose={() => (previewFile = undefined)}></FauxBrowser>
+						<FauxBrowser
+							bind:this={fauxBrowser}
+							{fs}
+							{previewFile}
+							onClose={() => (previewFile = undefined)}></FauxBrowser>
 					</Pane>
 				{/if}
 			</Splitpanes>
