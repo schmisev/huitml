@@ -53,28 +53,34 @@
 		@apply bg-red-300;
 	}
 
-  &.positive {
+	&.positive {
 		border: 2px solid;
 		@apply border-green-400;
 		@apply bg-green-300;
 	}
 
 	&.warning {
-    border: 2px solid;
-    @apply border-orange-400;
+		border: 2px solid;
+		@apply border-orange-400;
 		@apply bg-orange-300;
 	}
 
 	&.neutral {
-    border: 2px solid;
-    @apply border-blue-400;
+		border: 2px solid;
+		@apply border-blue-400;
 		@apply bg-blue-300;
 	}
 
-  &.special {
-    border: 2px solid;
-    @apply border-purple-400;
+	&.special {
+		border: 2px solid;
+		@apply border-purple-400;
 		@apply bg-purple-300;
+	}
+
+	&.marker {
+		border: 2px solid;
+		@apply border-yellow-400;
+		@apply bg-yellow-300;
 	}
 }
 
@@ -141,15 +147,15 @@
 }
 
 .rounded-large {
-  border-radius: 0.5rem;
+	border-radius: 0.5rem;
 }
 
 .rounded-small {
-  border-radius: 0.2rem;
+	border-radius: 0.2rem;
 }
 
 .standard-shadow {
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 /* codemirror */
@@ -166,4 +172,68 @@
 	height: 100%;
 	min-height: 0;
 	flex-grow: 1;
+}
+
+/* marked stuff */
+.marked {
+	h1 {
+    font-weight: bold;
+		font-size: x-large;
+	}
+
+  h2 {
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.1);
+    font-weight: bold;
+    font-size: x-large;
+    padding: 0 0.5rem;
+    border-radius: 0.5rem;
+  }
+
+  h3 {
+    font-weight: bold;
+    font-size: large;
+  }
+
+  h4 {
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.1);
+    font-weight: bold;
+    padding: 0 0.5rem;
+    border-radius: 0.5rem;
+  }
+
+  h5 {
+    font-weight: bold;
+    font-style: italic;
+  }
+
+  p {
+    margin: 0.5rem 0;
+  }
+
+  pre {
+    font-weight: bold;
+    border-radius: 0.5rem;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    
+    @apply text-green-500;
+    @apply bg-gray-900;
+  }
+
+  ul {
+    display: block;
+    list-style: outside;
+    margin: 0.5rem 0;
+    margin-left: 1.5rem;
+  }
+
+  ol {
+    display: block;
+    list-style: outside i;
+    margin: 0.5rem 0;
+    margin-left: 1.5rem;
+  }
 }

@@ -13,6 +13,7 @@ import xIcon from '$lib/assets/ui-icons/cross-svgrepo-com.svg';
 import imgIcon from '$lib/assets/ui-icons/image-1-svgrepo-com.svg';
 import pointerIcon from '$lib/assets/ui-icons/hand-pointer-svgrepo-com.svg';
 import tableIcon from '$lib/assets/ui-icons/table-layout-svgrepo-com.svg';
+import downloadIcon from '$lib/assets/ui-icons/download-svgrepo-com.svg';
 
 import CSSIcon from '$lib/assets/file-icons/css.svg';
 import CSVIcon from '$lib/assets/file-icons/csv.svg';
@@ -45,6 +46,7 @@ export {
   imgIcon,
   pointerIcon,
   tableIcon,
+  downloadIcon,
 
 	CSSIcon,
 	CSVIcon,

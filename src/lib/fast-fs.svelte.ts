@@ -6,6 +6,8 @@ import type {
 	HuiNodeDefinition
 } from './hui-graphs/hui-core';
 import { resolve } from '$app/paths';
+import JSZip from 'jszip';
+import { downloadBlob } from './utils';
 
 export const PREVIEW_PREFIX = '/preview';
 
@@ -27,6 +29,11 @@ export interface FS_Dir {
 	handle: FileSystemDirectoryHandle;
 	map: SvelteMap<string, FS_Entry>;
 	parent?: FS_Dir;
+}
+
+export interface FS_FileTemplate {
+	ext: `.${string}`;
+	doc: string;
 }
 
 export class FS {
@@ -99,7 +106,9 @@ export class FS {
 			parent
 		});
 		parent.map.set(handle.name, newFile);
-		if (newFile.blob.type.startsWith('text')) {
+    console.log("file-type:", newFile.blob.type);
+
+		if (allowEdit(newFile)) {
 			const txt = await newFile.blob.text();
 			newFile.state = { doc: txt, cachedDoc: txt };
 		}
@@ -415,6 +424,93 @@ export class FS {
 		};
 		return graph;
 	}
+
+  getDirGraph(gotoFile: (path: string) => void): HuiGraphDefinition {
+    const graph: HuiGraphDefinition = {
+      edges: [],
+      nodes: []
+    }
+    const fs = this;
+
+    function connectNodes(entry?: FS_Entry, connectFromId?: string) {
+      if (!entry) return;
+      const v = document.URL + fs.getRelativeURL(entry).slice(1)
+      if (connectFromId) {
+        graph.edges.push({
+          fromId: connectFromId,
+          toId: v,
+        })
+      }
+      switch (entry.kind) {
+        case 'file':
+          const reducedURL = reducePath(v);
+					const file = fs.resolveURL(reducedURL);
+					const inFS = !!file;
+					const isHTML = !!file?.handle.name.endsWith('.html');
+					const isCSS = !!file?.handle.name.endsWith('.css');
+
+          graph.nodes.push({
+            id: v,
+            label: `<button class="button ${
+							inFS
+								? isHTML
+									? 'neutral'
+									: isCSS
+										? 'special'
+										: 'positive'
+								: 'none'
+						} hover:cursor-pointer">${entry.handle.name}</button>`,
+            labelOnClick: () => gotoFile(v)
+          });
+          break;
+        case 'dir':
+          graph.nodes.push({
+            id: v,
+            label: `<button class="button marker folder">${entry.handle.name || "Online-Ordner"}</button>`,
+          });
+
+          for (const dir of entry.map.values()) {
+            connectNodes(dir, v);
+          }
+          break;
+      }
+    }
+
+    connectNodes(this.root);
+
+    return graph;
+  }
+
+  // zipping
+  zipRecursively(dir: FS_Dir, zip: JSZip | null) {
+    if (!zip) return;
+    for (const entry of dir.map.values()) {
+      switch (entry.kind) {
+        case 'dir': {
+          const subDir = zip.folder(entry.handle.name);
+          this.zipRecursively(entry, subDir);
+          break;
+        }
+        case 'file': {
+          zip.file(entry.handle.name, entry.blob);
+          break;
+        }
+      }
+    }
+  }
+
+  async zipDir(dir: FS_Dir) {
+    const zip = new JSZip();
+    this.zipRecursively(dir, zip);
+    const ret = await zip.generateAsync({type: "blob"});
+    return ret;
+  }
+
+  async zipDownload(name: string) {
+    if (!this.root) return;
+    const ret = await this.zipDir(this.root);
+    downloadBlob(ret, name);
+  }
 }
 
 // helper func1ons
@@ -449,7 +545,12 @@ export function resolveToPreview(src: string) {
 	return resolve((PREVIEW_PREFIX + src) as '/');
 }
 
-export interface FS_FileTemplate {
-	ext: `.${string}`;
-	doc: string;
-}
+function allowEdit(file: FS_File) {
+      if (file.blob.type.startsWith("text")) return true;
+      for (const ext of [".md", ".html", ".css", ".js"]) {
+        if (file.handle.name.endsWith(ext)) return true;
+      }
+      return false;
+    }
+
+

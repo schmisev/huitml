@@ -22,6 +22,7 @@
 	import FileIcon from '$lib/components/FileIcon.svelte';
 	import Prompt from '$lib/components/Prompt.svelte';
 	import {
+		downloadIcon,
 		eyeIcon,
 		favicon,
 		globeIcon,
@@ -34,25 +35,30 @@
 		tableIcon,
 		trashIcon,
 		undoIcon,
-		wandIcon
+		wandIcon,
+		ZIPIcon
 	} from '$lib/icons';
 	import LiveView from '$lib/components/LiveView.svelte';
 	import FauxBrowser from '$lib/components/FauxBrowser.svelte';
 	import HuiElk from '$lib/hui-graphs/HuiElk.svelte';
 	import CSSView from '$lib/components/CSSView.svelte';
 	import { doc } from 'prettier';
+	import HuiDagre from '$lib/hui-graphs/HuiDagre.svelte';
+	import { convertAnyToGraph } from '$lib/hui-graphs/hui-any';
+	import MDView from '$lib/components/MDView.svelte';
 
 	// setup
 	let view: EditorView | undefined = $state();
 	let root: FileSystemDirectoryHandle | undefined = $state();
 	let fs: FS = new FS();
 	let tab: FS_File | undefined = $state();
-	let selectedFile: FS_Entry | undefined = $state();
-	let draggedFile: FS_Entry | undefined = $state();
+	let selectedEntry: FS_Entry | undefined = $state();
+	let draggedEntry: FS_Entry | undefined = $state();
 	let previewFile: FS_File | undefined = $state();
 	let fauxBrowser: FauxBrowser | undefined = $state();
 	let liveView: LiveView | undefined = $state();
 	let simplePrompt: Prompt;
+	let refViewToggle = $state(true);
 
 	// loading
 	async function loadOPFS() {
@@ -87,20 +93,46 @@
 		}
 	}
 
+	async function loadFileFromDisc(entry?: FS_Entry) {
+		if (!fs.root) return;
+    if (!entry) entry = fs.root;
+		if (entry.kind === 'file') entry = entry.parent;
+		try {
+			const files = await window.showOpenFilePicker({ multiple: true });
+			for (const file of files) {
+				const blob = await file.getFile();
+				fs.createFile(entry, file.name, blob);
+			}
+		} catch (e) {
+			console.error(e);
+			return;
+		}
+	}
+
+	async function downloadProject() {
+		if (!root) return;
+		try {
+			await fs.zipDownload(`projekt-${root.name || 'online'}.zip`);
+		} catch (e) {
+			console.error(e);
+			return;
+		}
+	}
+
 	// tab manipulation
 	function noTab() {
-		selectedFile = undefined;
+		selectedEntry = undefined;
 		tab = undefined;
 		previewFile = undefined;
 	}
 
 	function showFileInTab(file: FS_File) {
 		tab = file;
-		selectedFile = file;
+		selectedEntry = file;
 	}
 
 	function selectFolder(folder: FS_Dir) {
-		selectedFile = folder;
+		selectedEntry = folder;
 	}
 
 	function togglePreviewFile(file: FS_File) {
@@ -257,7 +289,8 @@
 		template: FS_FileTemplate,
 		entry?: FS_Dir | FS_File
 	) {
-		if (!entry) return;
+    if (!fs.root) return;
+		if (!entry) entry = fs.root;
 		if (entry.kind === 'file') entry = entry.parent;
 		const pathToFolder = fs.getPath(entry, false, false);
 
@@ -303,14 +336,14 @@
 	}
 
 	async function dropDraggedEntry(target: FS_Dir) {
-		if (!draggedFile) return;
+		if (!draggedEntry) return;
 
-		switch (draggedFile.kind) {
+		switch (draggedEntry.kind) {
 			case 'file':
-				const newFile = await fs.moveFile(draggedFile, target);
+				const newFile = await fs.moveFile(draggedEntry, target);
 				if (!newFile) return;
 				showFileInTab(newFile);
-				draggedFile = undefined;
+				draggedEntry = undefined;
 				break;
 			case 'dir':
 				break;
@@ -408,10 +441,10 @@
 {#snippet showTools(tab: FS_File)}
 	{#if tab.blob.type.endsWith('html')}
 		<div class="flex flex-row gap-2 flex-wrap">
-			<div class="flex flex-row flex-wrap gap-1">
+			<div class="flex flex-row flex-nowrap gap-1">
 				<!-- INLINE -->
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText((content) => `<a href="">${content}</a>`, 'Link');
 					}}
@@ -419,7 +452,7 @@
 					<u class="text-blue-700">{'<a>'}</u>
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText((content) => `<b>${content}</b>`, 'fett');
 					}}
@@ -427,7 +460,7 @@
 					<b>{'<b>'}</b>
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText((content) => `<i>${content}</i>`, 'kursiv');
 					}}
@@ -435,7 +468,7 @@
 					<i>{'<i>'}</i>
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText((content) => `<u>${content}</u>`, 'unterstrichen');
 					}}
@@ -443,7 +476,7 @@
 					<u>{'<u>'}</u>
 				</button>
 				<button
-					class="button medium flex flex-row flex-nowrap items-center gap-1"
+					class="button small flex flex-row flex-nowrap items-center gap-1"
 					onclick={() => {
 						insertText(
 							(content) => `<img width="100" src="${content}.jpg">`,
@@ -451,19 +484,18 @@
 						);
 					}}
 					title="Bild">
-					<img class="w-5" alt="img" src={imgIcon} />{'<img>'}
+					<img class="w-3" alt="img" src={imgIcon} />{'<img>'}
 				</button>
 				<button
-					class="button medium flex flex-row items-center gap-1"
+					class="button small flex flex-row items-center gap-1"
 					onclick={() => {
 						insertText((content) => `<button>${content}</button>`, 'Button');
 					}}
 					title="Button">
-					<img alt="table" class="w-5" src={pointerIcon} /><span
-						>{'<button>'}</span>
+					<img alt="table" class="w-3" src={pointerIcon} />{'<button>'}
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText(
 							(content) => `<link href="${content}" rel="stylesheet">`,
@@ -471,13 +503,13 @@
 						);
 					}}
 					title="Style-Link">
-					{'<link "stylesheet">'}
+					{'<link>'}
 				</button>
 			</div>
 			<!-- BLOCKS -->
-			<div class="flex flex-row flex-wrap gap-1">
+			<div class="flex flex-row flex-nowrap gap-1">
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText(
 							(content) => `
@@ -491,7 +523,7 @@ ${content}
 					{'<div>'}
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText(
 							(content) => `
@@ -505,7 +537,7 @@ ${content}
 					{'<p>'}
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText(
 							(content) => `
@@ -520,7 +552,7 @@ ${content}
 					{'● <ul>'}
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText(
 							(content) => `
@@ -535,7 +567,7 @@ ${content}
 					{'1. <ol>'}
 				</button>
 				<button
-					class="button medium flex flex-row items-center gap-1"
+					class="button small flex flex-row items-center gap-1"
 					onclick={() => {
 						insertText(
 							(content) => `
@@ -551,10 +583,10 @@ ${content}
 						);
 					}}
 					title="Tabelle">
-					<img alt="table" class="w-5" src={tableIcon} />{'<table>'}
+					<img alt="table" class="w-3" src={tableIcon} />{'<table>'}
 				</button>
 				<button
-					class="button medium"
+					class="button small"
 					onclick={() => {
 						insertText(
 							(content) => `
@@ -601,7 +633,7 @@ ${content}
 		role="button"
 		tabindex="-1"
 		class="container folder"
-		class:selected={selectedFile && fs.equalEntry(selectedFile, root)}
+		class:selected={selectedEntry && fs.equalEntry(selectedEntry, root)}
 		ondragover={select}
 		ondragleave={deselect}
 		ondragend={deselect}
@@ -609,7 +641,7 @@ ${content}
 			ev.stopPropagation();
 			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
-			if (draggedFile) return await dropDraggedEntry(root);
+			if (draggedEntry) return await dropDraggedEntry(root);
 			if (!ev.dataTransfer) return;
 			let selectedFile: FS_File | null = null;
 			for (const file of ev.dataTransfer.files) {
@@ -628,7 +660,7 @@ ${content}
 				<FileIcon file={root}></FileIcon>
 				{root.handle.name || 'Online-Ordner'}
 			</button>
-			{#if selectedFile === root && root.parent}
+			{#if selectedEntry === root && root.parent}
 				<button
 					class="button"
 					title="Datei umbenennen"
@@ -647,7 +679,7 @@ ${content}
 				<button
 					draggable="true"
 					class="button file grow flex flex-row items-center cursor-grab gap-2 min-w-0 overflow-hidden"
-					class:selected={selectedFile === file}
+					class:selected={selectedEntry === file}
 					oncontextmenu={(ev) => {
 						ev.preventDefault();
 						togglePreviewFile(file);
@@ -661,7 +693,7 @@ ${content}
 						}
 					}}
 					ondragstart={(ev) => {
-						draggedFile = file;
+						draggedEntry = file;
 					}}>
 					<FileIcon {file}></FileIcon>
 					{#if file === previewFile}
@@ -672,7 +704,7 @@ ${content}
 							? ''
 							: '*'}</span>
 				</button>
-				{#if selectedFile && fs.equalEntry(selectedFile, file)}
+				{#if selectedEntry && fs.equalEntry(selectedEntry, file)}
 					<button
 						class="button"
 						title="Datei umbenennen"
@@ -710,17 +742,24 @@ ${content}
 							class="w-5"
 							src={favicon} /><span class="text-white text-nowrap">by sms</span>
 					</div>
-					{#if fs.root && fs.root.handle.name === ''}
+					<div class="w-full flex flex-row gap-2 flex-nowrap">
+						{#if fs.root && fs.root.handle.name === ''}
+							<button
+								class="grow button items-center text-nowrap text-ellipsis flex flex-row gap-2 overflow-clip min-w-0"
+								onclick={loadFolder}
+								><img alt="pc" class="h-5" src={laptopIcon} /> Lade Ordner von PC</button>
+						{:else}
+							<button
+								class="grow button items-center text-nowrap text-ellipsis flex flex-row gap-2 overflow-clip min-w-0"
+								onclick={loadOPFS}
+								><img alt="globe" class="h-5" src={globeIcon} /> Lade Online-Ordner</button>
+						{/if}
 						<button
-							class="button stretch shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0"
-							onclick={loadFolder}
-							><img alt="pc" class="h-5" src={laptopIcon} /> Lade Ordner von PC</button>
-					{:else}
-						<button
-							class="button stretch shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0"
-							onclick={loadOPFS}
-							><img alt="globe" class="h-5" src={globeIcon} /> Lade Online-Ordner</button>
-					{/if}
+							title="Lade das Online-Projekt als .zip-Ordner herunter"
+							class="button shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0"
+							onclick={downloadProject}
+							><img alt="dl" class="h-5" src={ZIPIcon} /></button>
+					</div>
 					{#if fs.root}
 						<div class="flex flex-row gap-2 justify-center">
 							<button
@@ -732,19 +771,28 @@ ${content}
 								title="Neues HTML-File erstellen"
 								class="button inline-flex items-center"
 								onclick={() =>
-									createFileFromTemplate(HTML_TEMPLATE, selectedFile)}
+									createFileFromTemplate(HTML_TEMPLATE, selectedEntry)}
 								><FileIcon ext=".html"></FileIcon></button>
 							<button
 								title="Neues CSS-File erstellen"
 								class="button inline-flex items-center"
 								onclick={() =>
-									createFileFromTemplate(CSS_TEMPLATE, selectedFile)}
+									createFileFromTemplate(CSS_TEMPLATE, selectedEntry)}
 								><FileIcon ext=".css"></FileIcon></button>
 							<button
 								title="Neuen Ordner erstellen"
 								class="button inline-flex items-center"
-								onclick={() => createFolder(selectedFile)}
+								onclick={() => createFolder(selectedEntry)}
 								><FileIcon ext="dir"></FileIcon></button>
+							<button
+								title="Dateien hochladen"
+								class="button inline-flex items-center"
+								onclick={() => loadFileFromDisc(selectedEntry)}
+								><img
+									alt="upload"
+									src={downloadIcon}
+									class="rotate-180 w-5"
+									 /></button>
 						</div>
 					{:else}
 						<div>Kein Ordner geöffnet</div>
@@ -761,10 +809,10 @@ ${content}
 		</Pane>
 		<Pane>
 			<Splitpanes horizontal>
-				<Pane size={70}>
+				<Pane size={100}>
 					<div class="flex flex-col gap-2 p-2 h-full min-h-0 max-h-full">
 						{#if tab}
-							<div class="flex flex-row items-center gap-2">
+							<div class="flex flex-row items-center gap-2 relative">
 								<div class="min-w-0">
 									<div class="font-bold min-w-0 text-nowrap">
 										{fs.getPath(tab)}
@@ -780,7 +828,7 @@ ${content}
 									{/if}
 								</div>
 								{#if tab.state}
-									<div class="grow flex flex-row gap-2 justify-end">
+									<div class="absolute top-0 right-0 flex flex-row gap-2">
 										<button
 											title="Rückgängig!"
 											class="button shrink-0"
@@ -799,7 +847,6 @@ ${content}
 									</div>
 								{/if}
 							</div>
-							<div class="flex flex-col flex-wrap"></div>
 							{#if tab.state}
 								{@render showTools(tab)}
 								<CodeMirror
@@ -819,26 +866,6 @@ ${content}
 							</div>
 						{/if}
 					</div>
-				</Pane>
-				<Pane>
-					{#if fs.root}
-						<div
-							class="h-full w-full flex flex-col items-center justify-center">
-							<HuiElk
-								settings={{
-									defaultLayoutOptions: {
-										'elk.direction': 'DOWN',
-										'elk.spacing.edgeNode': '10',
-										'elk.spacing.edgeNodeBetweenLayers': '40',
-										'elk.layered.compaction.postCompaction.strategy':
-											'LEFT_RIGHT',
-										'elk.layered.unnecessaryBendRemoval': 'true'
-									}
-								}}
-								graphDef={fs.getRefGraph(gotoFileInTab)}>
-							</HuiElk>
-						</div>
-					{/if}
 				</Pane>
 			</Splitpanes>
 		</Pane>
@@ -863,6 +890,8 @@ ${content}
 							</div>
 						{:else if tab.handle.name.endsWith('.css')}
 							<CSSView {src} doc={tab.state?.doc || ''}></CSSView>
+            {:else if tab.handle.name.endsWith('.md')}
+              <MDView {src} doc={tab.state?.doc || ''}></MDView>
 						{:else}
 							<LiveView
 								bind:this={liveView}
@@ -880,6 +909,38 @@ ${content}
 							{fs}
 							{previewFile}
 							onClose={() => (previewFile = undefined)}></FauxBrowser>
+					</Pane>
+				{/if}
+
+				{#if fs.root}
+					<Pane size={30}>
+						<div
+							class="relative h-full w-full flex flex-col items-center justify-center">
+							<button
+								onclick={() => {
+									refViewToggle = !refViewToggle;
+								}}
+								class="absolute button left-2 top-2">
+								{refViewToggle ? 'Verweisgraph' : 'Ordnergraph'}
+							</button>
+							{#if refViewToggle}
+								<HuiDagre
+									settings={{
+										marginx: 10,
+										marginy: 10
+									}}
+									graphDef={fs.getRefGraph(gotoFileInTab)}>
+								</HuiDagre>
+							{:else}
+								<HuiDagre
+									settings={{
+										marginx: 10,
+										marginy: 10
+									}}
+									graphDef={fs.getDirGraph(gotoFileInTab)}>
+								</HuiDagre>
+							{/if}
+						</div>
 					</Pane>
 				{/if}
 			</Splitpanes>
