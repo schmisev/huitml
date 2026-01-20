@@ -179,6 +179,7 @@
 	h1 {
     font-weight: bold;
 		font-size: x-large;
+    margin: 0.7rem 0 0.5rem 0;
 	}
 
   h2 {
@@ -188,11 +189,13 @@
     font-size: x-large;
     padding: 0 0.5rem;
     border-radius: 0.5rem;
+    margin: 0.7rem 0 0.5rem 0;
   }
 
   h3 {
     font-weight: bold;
     font-size: large;
+    margin: 0.7rem 0 0.5rem 0;
   }
 
   h4 {
@@ -201,11 +204,13 @@
     font-weight: bold;
     padding: 0 0.5rem;
     border-radius: 0.5rem;
+    margin: 0.7rem 0 0.5rem 0;
   }
 
   h5 {
     font-weight: bold;
     font-style: italic;
+    margin: 0.7rem 0 0.5rem 0;
   }
 
   p {

@@ -8,6 +8,7 @@ import type {
 import { resolve } from '$app/paths';
 import JSZip from 'jszip';
 import { downloadBlob } from './utils';
+import { FolderIcon } from './icons';
 
 export const PREVIEW_PREFIX = '/preview';
 
@@ -460,18 +461,25 @@ export class FS {
 										: 'positive'
 								: 'none'
 						} hover:cursor-pointer">${entry.handle.name}</button>`,
-            labelOnClick: () => gotoFile(v)
+            labelOnClick: () => gotoFile(v),
+            labelClasses: ["p-1"]
           });
           break;
         case 'dir':
           graph.nodes.push({
             id: v,
-            label: `<button class="button marker folder">${entry.handle.name || "Online-Ordner"}</button>`,
+            label: `<button class="button folder flex flex-row items-center gap-2"><img class="w-5" src="${FolderIcon}">${entry.handle.name || "Online-Ordner"}</button>`,
+            labelClasses: ["p-1"]
           });
 
-          for (const dir of entry.map.values()) {
+          const {dirs, files} = fs.getSortedChildren(entry);
+          for (const file of files) {
+            connectNodes(file, v);
+          }
+          for (const dir of dirs) {
             connectNodes(dir, v);
           }
+          
           break;
       }
     }

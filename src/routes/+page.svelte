@@ -11,6 +11,7 @@
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
+  import * as parserJS from 'prettier/parser-babel';
 	import {
 		FS,
 		type FS_FileTemplate,
@@ -36,6 +37,7 @@
 		trashIcon,
 		undoIcon,
 		wandIcon,
+		xIcon,
 		ZIPIcon
 	} from '$lib/icons';
 	import LiveView from '$lib/components/LiveView.svelte';
@@ -59,6 +61,7 @@
 	let liveView: LiveView | undefined = $state();
 	let simplePrompt: Prompt;
 	let refViewToggle = $state(true);
+  let graphSize = $state(30);
 
 	// loading
 	async function loadOPFS() {
@@ -95,7 +98,7 @@
 
 	async function loadFileFromDisc(entry?: FS_Entry) {
 		if (!fs.root) return;
-    if (!entry) entry = fs.root;
+		if (!entry) entry = fs.root;
 		if (entry.kind === 'file') entry = entry.parent;
 		try {
 			const files = await window.showOpenFilePicker({ multiple: true });
@@ -213,7 +216,7 @@
 		if (!tab?.state) return;
 		if (!view) return;
 
-		if (tab.handle.name.endsWith('html')) {
+		if (tab.handle.name.endsWith('.html')) {
 			const newDoc = await prettier.format(tab.state.doc, {
 				parser: 'html',
 				plugins: [parserHTML]
@@ -225,10 +228,22 @@
 					insert: newDoc
 				}
 			});
-		} else if (tab.handle.name.endsWith('css')) {
+		} else if (tab.handle.name.endsWith('.css')) {
 			const newDoc = await prettier.format(tab.state.doc, {
 				parser: 'css',
 				plugins: [parserCSS]
+			});
+			view.dispatch({
+				changes: {
+					from: 0,
+					to: view.state.doc.length,
+					insert: newDoc
+				}
+			});
+		} else if (tab.handle.name.endsWith('.js')) {
+			const newDoc = await prettier.format(tab.state.doc, {
+        parser: "babel",
+				plugins: [parserJS]
 			});
 			view.dispatch({
 				changes: {
@@ -264,6 +279,16 @@
 		ext: '.css'
 	};
 
+  const JS_TEMPLATE: FS_FileTemplate = {
+		doc: `function hello(name) {
+  console.log(\`Hallo, \${name}!\`);
+}
+
+hello("Friend")
+`,
+		ext: '.js'
+	};
+
 	// create
 	async function createFile(entry?: FS_Dir | FS_File) {
 		if (!entry) return;
@@ -289,7 +314,7 @@
 		template: FS_FileTemplate,
 		entry?: FS_Dir | FS_File
 	) {
-    if (!fs.root) return;
+		if (!fs.root) return;
 		if (!entry) entry = fs.root;
 		if (entry.kind === 'file') entry = entry.parent;
 		const pathToFolder = fs.getPath(entry, false, false);
@@ -416,10 +441,8 @@
 		if (!navigator.serviceWorker.controller) location.reload(); // ensure control
 
 		setInterval(() => {
-			navigator.serviceWorker.controller?.postMessage({
-				type: 'SEND_INFO'
-			});
-		}, 5000);
+      fs.setVFS();
+		}, 10000);
 
 		document.onkeydown = (e) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -699,7 +722,7 @@ ${content}
 					{#if file === previewFile}
 						<img alt="eye" class="w-5" src={eyeIcon} />
 					{/if}
-					<span class="grow"
+					<span class="grow text-nowrap whitespace-nowrap"
 						>{file.handle.name}{file.state?.doc === file.state?.cachedDoc
 							? ''
 							: '*'}</span>
@@ -742,7 +765,7 @@ ${content}
 							class="w-5"
 							src={favicon} /><span class="text-white text-nowrap">by sms</span>
 					</div>
-					<div class="w-full flex flex-row gap-2 flex-nowrap">
+					<div class="w-full flex flex-row gap-1 flex-nowrap">
 						{#if fs.root && fs.root.handle.name === ''}
 							<button
 								class="grow button items-center text-nowrap text-ellipsis flex flex-row gap-2 overflow-clip min-w-0"
@@ -755,44 +778,58 @@ ${content}
 								><img alt="globe" class="h-5" src={globeIcon} /> Lade Online-Ordner</button>
 						{/if}
 						<button
+							title="Ordner neu laden"
+							class="button"
+							onclick={() => reloadFolder()}
+							><img alt="refresh" class="h-5" src={refreshIcon} /></button>
+						<button
 							title="Lade das Online-Projekt als .zip-Ordner herunter"
 							class="button shrink-0 items-center flex flex-row gap-2 overflow-hidden min-w-0"
 							onclick={downloadProject}
 							><img alt="dl" class="h-5" src={ZIPIcon} /></button>
 					</div>
 					{#if fs.root}
-						<div class="flex flex-row gap-2 justify-center">
-							<button
-								title="Ordner neu laden"
-								class="button"
-								onclick={() => reloadFolder()}
-								><img alt="refresh" class="h-5" src={refreshIcon} /></button>
-							<button
-								title="Neues HTML-File erstellen"
-								class="button inline-flex items-center"
-								onclick={() =>
-									createFileFromTemplate(HTML_TEMPLATE, selectedEntry)}
-								><FileIcon ext=".html"></FileIcon></button>
-							<button
-								title="Neues CSS-File erstellen"
-								class="button inline-flex items-center"
-								onclick={() =>
-									createFileFromTemplate(CSS_TEMPLATE, selectedEntry)}
-								><FileIcon ext=".css"></FileIcon></button>
-							<button
-								title="Neuen Ordner erstellen"
-								class="button inline-flex items-center"
-								onclick={() => createFolder(selectedEntry)}
-								><FileIcon ext="dir"></FileIcon></button>
-							<button
-								title="Dateien hochladen"
-								class="button inline-flex items-center"
-								onclick={() => loadFileFromDisc(selectedEntry)}
-								><img
-									alt="upload"
-									src={downloadIcon}
-									class="rotate-180 w-5"
-									 /></button>
+						<div class="flex flex-row flex-wrap gap-1 justify-center">
+							<div class="flex flex-row gap-1 justify-center">
+								<button
+									title="Neues HTML-File erstellen"
+									class="button inline-flex items-center"
+									onclick={() =>
+										createFileFromTemplate(HTML_TEMPLATE, selectedEntry)}
+									><FileIcon ext=".html"></FileIcon></button>
+								<button
+									title="Neues CSS-File erstellen"
+									class="button inline-flex items-center"
+									onclick={() =>
+										createFileFromTemplate(CSS_TEMPLATE, selectedEntry)}
+									><FileIcon ext=".css"></FileIcon></button>
+                <button
+									title="Neues JS-File erstellen"
+									class="button inline-flex items-center"
+									onclick={() =>
+										createFileFromTemplate(JS_TEMPLATE, selectedEntry)}
+									><FileIcon ext=".js"></FileIcon></button>
+							</div>
+							<div class="flex flex-row gap-1 justify-center">
+								<button
+									title="Neue Datei erstellen"
+									class="button inline-flex items-center"
+									onclick={() => createFile(selectedEntry)}
+									><FileIcon ext="txt"></FileIcon></button>
+								<button
+									title="Neuen Ordner erstellen"
+									class="button inline-flex items-center"
+									onclick={() => createFolder(selectedEntry)}
+									><FileIcon ext="dir"></FileIcon></button>
+								<button
+									title="Dateien hochladen"
+									class="button inline-flex items-center"
+									onclick={() => loadFileFromDisc(selectedEntry)}
+									><img
+										alt="upload"
+										src={downloadIcon}
+										class="rotate-180 w-5" /></button>
+							</div>
 						</div>
 					{:else}
 						<div>Kein Ordner geöffnet</div>
@@ -890,8 +927,8 @@ ${content}
 							</div>
 						{:else if tab.handle.name.endsWith('.css')}
 							<CSSView {src} doc={tab.state?.doc || ''}></CSSView>
-            {:else if tab.handle.name.endsWith('.md')}
-              <MDView {src} doc={tab.state?.doc || ''}></MDView>
+						{:else if tab.handle.name.endsWith('.md')}
+							<MDView {src} doc={tab.state?.doc || ''}></MDView>
 						{:else}
 							<LiveView
 								bind:this={liveView}
@@ -913,7 +950,7 @@ ${content}
 				{/if}
 
 				{#if fs.root}
-					<Pane size={30}>
+					<Pane bind:size={graphSize}>
 						<div
 							class="relative h-full w-full flex flex-col items-center justify-center">
 							<button
@@ -923,22 +960,35 @@ ${content}
 								class="absolute button left-2 top-2">
 								{refViewToggle ? 'Verweisgraph' : 'Ordnergraph'}
 							</button>
+              <button
+								onclick={() => graphSize = 0}
+								class="absolute button right-2 top-2 flex flex-row items-center">
+                <span>&ZeroWidthSpace;</span>
+								<img alt="close" class="w-4" src={xIcon}>
+							</button>
 							{#if refViewToggle}
-								<HuiDagre
+								<HuiElk
 									settings={{
-										marginx: 10,
-										marginy: 10
+                    defaultLayoutOptions: {
+                      "elk.direction": "DOWN",
+                      "elk.layered.directionCongruency": "READING_DIRECTION",
+                      "elk.alignment": "CENTER",
+                    }
 									}}
 									graphDef={fs.getRefGraph(gotoFileInTab)}>
-								</HuiDagre>
+								</HuiElk>
 							{:else}
-								<HuiDagre
+								<HuiElk
 									settings={{
-										marginx: 10,
-										marginy: 10
+                    defaultLayoutOptions: {
+                      "elk.direction": "RIGHT",
+                      "elk.layered.directionCongruency": "READING_DIRECTION",
+                      "elk.alignment": "CENTER",
+                      "elk.layered.considerModelOrder.portModelOrder": "false",
+                    }
 									}}
 									graphDef={fs.getDirGraph(gotoFileInTab)}>
-								</HuiDagre>
+								</HuiElk>
 							{/if}
 						</div>
 					</Pane>

@@ -28,6 +28,7 @@
 	"dependencies": {
 		"@codemirror/lang-html": "^6.4.11",
 		"@dagrejs/dagre": "^1.1.8",
+		"@nyariv/sandboxjs": "^0.8.25",
 		"@tailwindcss/vite": "^4.1.18",
 		"@types/wicg-file-system-access": "^2023.10.7",
 		"angular-html-parser": "^10.2.1",
