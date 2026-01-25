@@ -11,7 +11,7 @@
 	import * as prettier from 'prettier/standalone';
 	import * as parserHTML from 'prettier/parser-html';
 	import * as parserCSS from 'prettier/parser-postcss';
-  import * as parserJS from 'prettier/parser-babel';
+	import * as parserJS from 'prettier/parser-babel';
 	import {
 		FS,
 		type FS_FileTemplate,
@@ -44,24 +44,22 @@
 	import FauxBrowser from '$lib/components/FauxBrowser.svelte';
 	import HuiElk from '$lib/hui-graphs/HuiElk.svelte';
 	import CSSView from '$lib/components/CSSView.svelte';
-	import { doc } from 'prettier';
-	import HuiDagre from '$lib/hui-graphs/HuiDagre.svelte';
-	import { convertAnyToGraph } from '$lib/hui-graphs/hui-any';
 	import MDView from '$lib/components/MDView.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	// setup
 	let view: EditorView | undefined = $state();
 	let root: FileSystemDirectoryHandle | undefined = $state();
 	let fs: FS = new FS();
 	let tab: FS_File | undefined = $state();
-	let selectedEntry: FS_Entry | undefined = $state();
-	let draggedEntry: FS_Entry | undefined = $state();
+	let selectedEntries: SvelteSet<FS_Entry> = $state(new SvelteSet());
+	let draggedEntries: SvelteSet<FS_Entry> = $state(new SvelteSet());
 	let previewFile: FS_File | undefined = $state();
 	let fauxBrowser: FauxBrowser | undefined = $state();
 	let liveView: LiveView | undefined = $state();
 	let simplePrompt: Prompt;
 	let refViewToggle = $state(true);
-  let graphSize = $state(30);
+	let graphSize = $state(30);
 
 	// loading
 	async function loadOPFS() {
@@ -123,20 +121,45 @@
 	}
 
 	// tab manipulation
+	function isSelected(entry?: FS_Entry): boolean {
+		if (!entry) return false;
+		for (const e of selectedEntries.values()) {
+			if (fs.equalEntry(e, entry)) return true;
+		}
+		return false;
+	}
+
+	function pickOneSelectedDir(): FS_Dir | undefined {
+		for (const e of selectedEntries.values()) {
+			if (e.kind === 'dir') return e;
+		}
+	}
+
 	function noTab() {
-		selectedEntry = undefined;
+		selectedEntries.clear();
 		tab = undefined;
 		previewFile = undefined;
 	}
 
-	function showFileInTab(file: FS_File) {
+	function selectFile(file: FS_File, addToSelection: boolean = false) {
 		tab = file;
-		selectedEntry = file;
+		if (addToSelection) {
+			if (selectedEntries.has(file)) selectedEntries.delete(file);
+			else selectedEntries.add(file);
+		} else {
+			selectedEntries.clear();
+			selectedEntries.add(file);
+		}
 	}
 
 	function selectFolder(folder: FS_Dir) {
-		selectedEntry = folder;
+		selectedEntries.clear();
+		selectedEntries.add(folder);
 	}
+
+  function dragSelected() {
+    draggedEntries = new SvelteSet([...selectedEntries.values()]);
+  }
 
 	function togglePreviewFile(file: FS_File) {
 		if (previewFile === file) previewFile = undefined;
@@ -160,14 +183,13 @@
 		if (path.search(base) === 0) {
 			if (!fs) return;
 			const reducedPath = path.replace(base, '/').replace('/preview', '');
-			console.log(reducedPath);
 			const file = fs.resolveURL(reducedPath);
 			if (!file) {
-				if (tab) showFileInTab(tab);
+				if (tab) selectFile(tab);
 				// window.open(path);
 				return;
 			}
-			showFileInTab(file);
+			selectFile(file);
 		} else {
 			window.open(path);
 		}
@@ -242,7 +264,7 @@
 			});
 		} else if (tab.handle.name.endsWith('.js')) {
 			const newDoc = await prettier.format(tab.state.doc, {
-        parser: "babel",
+				parser: 'babel',
 				plugins: [parserJS]
 			});
 			view.dispatch({
@@ -279,7 +301,7 @@
 		ext: '.css'
 	};
 
-  const JS_TEMPLATE: FS_FileTemplate = {
+	const JS_TEMPLATE: FS_FileTemplate = {
 		doc: `function hello(name) {
   console.log(\`Hallo, \${name}!\`);
 }
@@ -307,7 +329,7 @@ hello("Friend")
 		if (!fileName || !isValidFilename(fileName)) return;
 		const file = await fs.createFile(entry, fileName);
 		if (!file) return;
-		showFileInTab(file);
+		selectFile(file);
 	}
 
 	async function createFileFromTemplate(
@@ -340,7 +362,7 @@ hello("Friend")
 		};
 
 		await fs.saveFile(file);
-		showFileInTab(file);
+		selectFile(file);
 	}
 
 	async function createFolder(entry?: FS_Dir | FS_File) {
@@ -361,18 +383,22 @@ hello("Friend")
 	}
 
 	async function dropDraggedEntry(target: FS_Dir) {
-		if (!draggedEntry) return;
+		if (draggedEntries.size === 0) return;
 
-		switch (draggedEntry.kind) {
-			case 'file':
-				const newFile = await fs.moveFile(draggedEntry, target);
-				if (!newFile) return;
-				showFileInTab(newFile);
-				draggedEntry = undefined;
-				break;
-			case 'dir':
-				break;
+		for (const draggedEntry of draggedEntries.values()) {
+			switch (draggedEntry.kind) {
+				case 'file':
+					const newFile = await fs.moveFile(draggedEntry, target);
+					// if (!newFile) return;
+					// selectFile(newFile);
+					break;
+				case 'dir':
+					break;
+			}
 		}
+
+    draggedEntries.clear();
+    selectedEntries.clear();
 	}
 
 	// renames
@@ -418,7 +444,7 @@ hello("Friend")
 		if (!fileName || !isValidFilename(fileName)) return;
 		const movedFile = await fs.moveFile(file, undefined, fileName);
 		if (!movedFile) return;
-		showFileInTab(movedFile);
+		selectFile(movedFile);
 	}
 
 	async function deleteEntryInEditor(entry: FS_Dir | FS_File) {
@@ -441,8 +467,8 @@ hello("Friend")
 		if (!navigator.serviceWorker.controller) location.reload(); // ensure control
 
 		setInterval(() => {
-      fs.setVFS();
-		}, 10000);
+			fs.setVFS();
+		}, 500000);
 
 		document.onkeydown = (e) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -656,7 +682,7 @@ ${content}
 		role="button"
 		tabindex="-1"
 		class="container folder"
-		class:selected={selectedEntry && fs.equalEntry(selectedEntry, root)}
+		class:selected={isSelected(root)}
 		ondragover={select}
 		ondragleave={deselect}
 		ondragend={deselect}
@@ -664,13 +690,13 @@ ${content}
 			ev.stopPropagation();
 			ev.preventDefault();
 			ev.currentTarget.classList.remove('selected');
-			if (draggedEntry) return await dropDraggedEntry(root);
+			if (draggedEntries.size > 0) return await dropDraggedEntry(root);
 			if (!ev.dataTransfer) return;
 			let selectedFile: FS_File | null = null;
 			for (const file of ev.dataTransfer.files) {
 				selectedFile = await fs.createFile(root, file.name, file);
 			}
-			if (selectedFile) showFileInTab(selectedFile);
+			if (selectedFile) selectFile(selectedFile);
 		}}>
 		<div class="flex flex-row items-center gap-1">
 			<button
@@ -683,7 +709,7 @@ ${content}
 				<FileIcon file={root}></FileIcon>
 				{root.handle.name || 'Online-Ordner'}
 			</button>
-			{#if selectedEntry === root && root.parent}
+			{#if isSelected(root.parent)}
 				<button
 					class="button"
 					title="Datei umbenennen"
@@ -702,7 +728,7 @@ ${content}
 				<button
 					draggable="true"
 					class="button file grow flex flex-row items-center cursor-grab gap-2 min-w-0 overflow-hidden"
-					class:selected={selectedEntry === file}
+					class:selected={isSelected(file)}
 					oncontextmenu={(ev) => {
 						ev.preventDefault();
 						togglePreviewFile(file);
@@ -710,13 +736,14 @@ ${content}
 					onclick={(ev) => {
 						ev.preventDefault();
 						if (ev.button === 0) {
-							showFileInTab(file);
+							selectFile(file, ev.ctrlKey);
 						} else if (ev.button === 2) {
 							togglePreviewFile(file);
 						}
 					}}
 					ondragstart={(ev) => {
-						draggedEntry = file;
+            selectedEntries.add(file);
+						dragSelected();
 					}}>
 					<FileIcon {file}></FileIcon>
 					{#if file === previewFile}
@@ -727,7 +754,7 @@ ${content}
 							? ''
 							: '*'}</span>
 				</button>
-				{#if selectedEntry && fs.equalEntry(selectedEntry, file)}
+				{#if isSelected(file)}
 					<button
 						class="button"
 						title="Datei umbenennen"
@@ -795,36 +822,36 @@ ${content}
 									title="Neues HTML-File erstellen"
 									class="button inline-flex items-center"
 									onclick={() =>
-										createFileFromTemplate(HTML_TEMPLATE, selectedEntry)}
+										createFileFromTemplate(HTML_TEMPLATE, pickOneSelectedDir())}
 									><FileIcon ext=".html"></FileIcon></button>
 								<button
 									title="Neues CSS-File erstellen"
 									class="button inline-flex items-center"
 									onclick={() =>
-										createFileFromTemplate(CSS_TEMPLATE, selectedEntry)}
+										createFileFromTemplate(CSS_TEMPLATE, pickOneSelectedDir())}
 									><FileIcon ext=".css"></FileIcon></button>
-                <button
+								<button
 									title="Neues JS-File erstellen"
 									class="button inline-flex items-center"
 									onclick={() =>
-										createFileFromTemplate(JS_TEMPLATE, selectedEntry)}
+										createFileFromTemplate(JS_TEMPLATE, pickOneSelectedDir())}
 									><FileIcon ext=".js"></FileIcon></button>
 							</div>
 							<div class="flex flex-row gap-1 justify-center">
 								<button
 									title="Neue Datei erstellen"
 									class="button inline-flex items-center"
-									onclick={() => createFile(selectedEntry)}
+									onclick={() => createFile(pickOneSelectedDir())}
 									><FileIcon ext="txt"></FileIcon></button>
 								<button
 									title="Neuen Ordner erstellen"
 									class="button inline-flex items-center"
-									onclick={() => createFolder(selectedEntry)}
+									onclick={() => createFolder(pickOneSelectedDir())}
 									><FileIcon ext="dir"></FileIcon></button>
 								<button
 									title="Dateien hochladen"
 									class="button inline-flex items-center"
-									onclick={() => loadFileFromDisc(selectedEntry)}
+									onclick={() => loadFileFromDisc(pickOneSelectedDir())}
 									><img
 										alt="upload"
 										src={downloadIcon}
@@ -960,32 +987,32 @@ ${content}
 								class="absolute button left-2 top-2">
 								{refViewToggle ? 'Verweisgraph' : 'Ordnergraph'}
 							</button>
-              <button
-								onclick={() => graphSize = 0}
+							<button
+								onclick={() => (graphSize = 0)}
 								class="absolute button right-2 top-2 flex flex-row items-center">
-                <span>&ZeroWidthSpace;</span>
-								<img alt="close" class="w-4" src={xIcon}>
+								<span>&ZeroWidthSpace;</span>
+								<img alt="close" class="w-4" src={xIcon} />
 							</button>
 							{#if refViewToggle}
 								<HuiElk
 									settings={{
-                    defaultLayoutOptions: {
-                      "elk.direction": "DOWN",
-                      "elk.layered.directionCongruency": "READING_DIRECTION",
-                      "elk.alignment": "CENTER",
-                    }
+										defaultLayoutOptions: {
+											'elk.direction': 'DOWN',
+											'elk.layered.directionCongruency': 'READING_DIRECTION',
+											'elk.alignment': 'CENTER'
+										}
 									}}
 									graphDef={fs.getRefGraph(gotoFileInTab)}>
 								</HuiElk>
 							{:else}
 								<HuiElk
 									settings={{
-                    defaultLayoutOptions: {
-                      "elk.direction": "RIGHT",
-                      "elk.layered.directionCongruency": "READING_DIRECTION",
-                      "elk.alignment": "CENTER",
-                      "elk.layered.considerModelOrder.portModelOrder": "false",
-                    }
+										defaultLayoutOptions: {
+											'elk.direction': 'RIGHT',
+											'elk.layered.directionCongruency': 'READING_DIRECTION',
+											'elk.alignment': 'CENTER',
+											'elk.layered.considerModelOrder.portModelOrder': 'false'
+										}
 									}}
 									graphDef={fs.getDirGraph(gotoFileInTab)}>
 								</HuiElk>

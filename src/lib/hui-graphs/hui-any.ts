@@ -81,7 +81,6 @@ export function convertAnyToGraph(
 						arrowEnd: 'none'
 					});
 					lastId = nextId;
-					console.log(lastId);
 					expand(nextId, attr, `${i}`);
 					break;
 			}

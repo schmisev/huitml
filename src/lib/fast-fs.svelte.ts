@@ -107,7 +107,7 @@ export class FS {
 			parent
 		});
 		parent.map.set(handle.name, newFile);
-    console.log("file-type:", newFile.blob.type);
+    // console.log("file-type:", newFile.blob.type);
 
 		if (allowEdit(newFile)) {
 			const txt = await newFile.blob.text();

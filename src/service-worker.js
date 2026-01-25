@@ -31,7 +31,7 @@ self.addEventListener('fetch', (event) => {
 	const path = url.pathname.replace("/huitml", '').replace('/preview', '') || '/index.html';
   
 	if (!files.has(path)) {
-    console.log("Not found", files);
+    console.log("Not found", files, path);
 		event.respondWith(new Response('Not found', { status: 404 }));
 		return;
 	}

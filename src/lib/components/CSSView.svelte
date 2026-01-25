@@ -17,7 +17,6 @@
 		sheet.replaceSync(doc);
 
 		untrack(() => {
-			console.log(sheet);
 			rules = [];
 			for (let i = 0; i < sheet.cssRules.length; i++) {
 				rules.push(sheet.cssRules[i] as CSSStyleRule);
